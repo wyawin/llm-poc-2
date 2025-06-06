@@ -1,0 +1,401 @@
+export class OllamaService {
+  constructor() {
+    this.baseUrl = process.env.OLLAMA_URL || 'http://localhost:11434';
+    this.visionModel = 'qwen2.5vl:7b';
+    this.analysisModel = 'deepseek-r1:8b';
+  }
+
+  async extractDataFromImage(imagePath) {
+    try {
+      console.log(`Extracting data from image: ${imagePath}`);
+      
+      // Read image file and convert to base64
+      const fs = await import('fs/promises');
+      const imageBuffer = await fs.readFile(imagePath);
+      const base64Image = imageBuffer.toString('base64');
+
+      const prompt = `You are a financial document analysis expert. Analyze this document image and extract all relevant financial and business information in a structured JSON format.
+
+This document could be one of the following types:
+- Profit and Loss Statement
+- Balance Sheet
+- Bank Statement
+- Credit History Report
+- Deed of Establishment
+- Director and Shareholder List
+- Tax Returns
+- Financial Reports
+
+Please extract the following information if available:
+1. Document Type: Identify the specific type of document
+2. Company Information: name, registration number, address, industry
+3. Personal Information: names, positions, addresses, contact details
+4. Financial Data: revenues, expenses, assets, liabilities, cash flows, account balances
+5. Credit Information: credit scores, payment history, outstanding debts
+6. Ownership Structure: directors, shareholders, ownership percentages
+7. Business Operations: business activities, establishment date, legal structure
+
+Return the data in this exact JSON structure:
+{
+  "documentType": "string (specific document type)",
+  "companyInfo": {
+    "name": "string or null",
+    "registrationNumber": "string or null",
+    "address": "string or null",
+    "industry": "string or null",
+    "establishmentDate": "string or null",
+    "legalStructure": "string or null"
+  },
+  "personalInfo": {
+    "individuals": [
+      {
+        "name": "string",
+        "position": "string",
+        "address": "string or null",
+        "phone": "string or null",
+        "email": "string or null",
+        "ownershipPercentage": "number or null"
+      }
+    ]
+  },
+  "financialInfo": {
+    "profitLoss": {
+      "revenue": "number or null",
+      "expenses": "number or null",
+      "netIncome": "number or null",
+      "period": "string or null"
+    },
+    "balanceSheet": {
+      "totalAssets": "number or null",
+      "totalLiabilities": "number or null",
+      "equity": "number or null",
+      "asOfDate": "string or null"
+    },
+    "bankStatements": [
+      {
+        "accountNumber": "string",
+        "accountType": "string",
+        "balance": "number",
+        "transactions": [
+          {
+            "date": "string",
+            "description": "string", 
+            "amount": "number",
+            "type": "credit or debit"
+          }
+        ],
+        "period": "string"
+      }
+    ],
+    "creditInfo": {
+      "creditScore": "number or null",
+      "creditHistory": [
+        {
+          "creditor": "string",
+          "accountType": "string",
+          "balance": "number",
+          "paymentStatus": "string",
+          "monthlyPayment": "number or null"
+        }
+      ]
+    },
+    "cashFlow": {
+      "operatingCashFlow": "number or null",
+      "investingCashFlow": "number or null",
+      "financingCashFlow": "number or null",
+      "period": "string or null"
+    }
+  },
+  "extractionDate": "ISO date string",
+  "confidence": "number (0-1)"
+}
+
+Only return valid JSON. If information is not available, use null for strings/numbers and empty arrays for arrays.`;
+
+      const response = await fetch(`${this.baseUrl}/api/generate`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: this.visionModel,
+          prompt: prompt,
+          images: [base64Image],
+          stream: false,
+          options: {
+            temperature: 0.1,
+            top_p: 0.9,
+          }
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Ollama API error: ${response.status} ${response.statusText}`);
+      }
+
+      const result = await response.json();
+      
+      // Parse the JSON response from Ollama
+      let extractedData;
+      try {
+        // Clean the response text to extract JSON
+        const responseText = result.response.trim();
+        const jsonMatch = responseText.match(/\{[\s\S]*\}/);
+        
+        if (jsonMatch) {
+          extractedData = JSON.parse(jsonMatch[0]);
+        } else {
+          throw new Error('No valid JSON found in response');
+        }
+      } catch (parseError) {
+        console.error('Failed to parse Ollama response:', parseError);
+        console.log('Raw response:', result.response);
+        
+        // Return a default structure if parsing fails
+        extractedData = {
+          documentType: "Unknown",
+          companyInfo: {},
+          personalInfo: { individuals: [] },
+          financialInfo: {
+            profitLoss: {},
+            balanceSheet: {},
+            bankStatements: [],
+            creditInfo: { creditHistory: [] },
+            cashFlow: {}
+          },
+          extractionDate: new Date().toISOString(),
+          confidence: 0.1,
+          rawResponse: result.response
+        };
+      }
+
+      // Ensure extractionDate is set
+      if (!extractedData.extractionDate) {
+        extractedData.extractionDate = new Date().toISOString();
+      }
+
+      console.log(`Successfully extracted data from image: ${imagePath}`);
+      return extractedData;
+
+    } catch (error) {
+      console.error('Ollama extraction error:', error);
+      throw new Error(`Failed to extract data from image: ${error.message}`);
+    }
+  }
+
+  async generateCreditInsights(allExtractedData) {
+    try {
+      console.log('Generating comprehensive credit insights using deepseek-r1:8b');
+
+      const prompt = `You are a senior credit analyst and financial expert. Analyze the following comprehensive business and financial data to provide detailed credit insights and recommendations.
+
+EXTRACTED DATA FROM MULTIPLE DOCUMENTS:
+${JSON.stringify(allExtractedData, null, 2)}
+
+Please provide a comprehensive analysis that includes:
+
+1. BUSINESS OVERVIEW
+   - Company profile and industry analysis
+   - Management team assessment
+   - Business model evaluation
+
+2. FINANCIAL ANALYSIS
+   - Revenue trends and profitability analysis
+   - Balance sheet strength assessment
+   - Cash flow analysis
+   - Debt capacity evaluation
+
+3. CREDIT RISK ASSESSMENT
+   - Payment history evaluation
+   - Debt-to-income/revenue ratios
+   - Liquidity position
+   - Overall creditworthiness
+
+4. INSIGHTS AND RECOMMENDATIONS
+   - Key strengths and weaknesses
+   - Risk factors and mitigation strategies
+   - Credit decision recommendation
+   - Suggested credit terms (if applicable)
+
+5. SCORING AND METRICS
+   - Overall credit score (300-850)
+   - Risk rating (Low/Medium/High)
+   - Recommended credit limit
+   - Interest rate suggestion
+
+Return your analysis in this JSON structure:
+{
+  "businessOverview": {
+    "companyProfile": "string",
+    "industryAnalysis": "string",
+    "managementAssessment": "string",
+    "businessModelEvaluation": "string"
+  },
+  "financialAnalysis": {
+    "revenueAnalysis": "string",
+    "profitabilityAssessment": "string",
+    "balanceSheetStrength": "string",
+    "cashFlowAnalysis": "string",
+    "debtCapacity": "string"
+  },
+  "creditRiskAssessment": {
+    "paymentHistoryEvaluation": "string",
+    "debtRatios": "string",
+    "liquidityPosition": "string",
+    "overallCreditworthiness": "string"
+  },
+  "insights": {
+    "keyStrengths": ["string"],
+    "keyWeaknesses": ["string"],
+    "riskFactors": ["string"],
+    "mitigationStrategies": ["string"]
+  },
+  "recommendation": {
+    "decision": "approve|conditional|decline",
+    "reasoning": "string",
+    "conditions": ["string"] // if conditional
+  },
+  "scoring": {
+    "creditScore": number, // 300-850
+    "riskRating": "Low|Medium|High",
+    "creditLimit": number,
+    "interestRate": number,
+    "confidenceLevel": number // 0-1
+  },
+  "summary": "string", // Executive summary
+  "analysisDate": "ISO date string"
+}
+
+Provide detailed, professional analysis based on the available data. If certain information is missing, note the limitations and provide recommendations based on available data.`;
+
+      const response = await fetch(`${this.baseUrl}/api/generate`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: this.analysisModel,
+          prompt: prompt,
+          stream: false,
+          options: {
+            temperature: 0.2,
+            top_p: 0.9,
+            num_predict: 4000
+          }
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Ollama API error: ${response.status} ${response.statusText}`);
+      }
+
+      const result = await response.json();
+      
+      // Parse the JSON response
+      let insights;
+      try {
+        const responseText = result.response.trim();
+        const jsonMatch = responseText.match(/\{[\s\S]*\}/);
+        
+        if (jsonMatch) {
+          insights = JSON.parse(jsonMatch[0]);
+        } else {
+          throw new Error('No valid JSON found in response');
+        }
+      } catch (parseError) {
+        console.error('Failed to parse insights response:', parseError);
+        console.log('Raw response:', result.response);
+        
+        // Return a fallback structure
+        insights = {
+          businessOverview: {
+            companyProfile: "Analysis could not be completed due to parsing error",
+            industryAnalysis: "Unable to analyze",
+            managementAssessment: "Unable to assess",
+            businessModelEvaluation: "Unable to evaluate"
+          },
+          financialAnalysis: {
+            revenueAnalysis: "Unable to analyze",
+            profitabilityAssessment: "Unable to assess",
+            balanceSheetStrength: "Unable to assess",
+            cashFlowAnalysis: "Unable to analyze",
+            debtCapacity: "Unable to evaluate"
+          },
+          creditRiskAssessment: {
+            paymentHistoryEvaluation: "Unable to evaluate",
+            debtRatios: "Unable to calculate",
+            liquidityPosition: "Unable to assess",
+            overallCreditworthiness: "Unable to determine"
+          },
+          insights: {
+            keyStrengths: ["Analysis incomplete"],
+            keyWeaknesses: ["Unable to determine"],
+            riskFactors: ["Analysis incomplete"],
+            mitigationStrategies: ["Unable to recommend"]
+          },
+          recommendation: {
+            decision: "decline",
+            reasoning: "Insufficient data for proper analysis",
+            conditions: []
+          },
+          scoring: {
+            creditScore: 500,
+            riskRating: "High",
+            creditLimit: 0,
+            interestRate: 0,
+            confidenceLevel: 0.1
+          },
+          summary: "Credit analysis could not be completed due to technical issues.",
+          analysisDate: new Date().toISOString(),
+          rawResponse: result.response
+        };
+      }
+
+      if (!insights.analysisDate) {
+        insights.analysisDate = new Date().toISOString();
+      }
+
+      console.log('Successfully generated credit insights');
+      return insights;
+
+    } catch (error) {
+      console.error('Credit insights generation error:', error);
+      throw new Error(`Failed to generate credit insights: ${error.message}`);
+    }
+  }
+
+  async checkHealth() {
+    try {
+      const response = await fetch(`${this.baseUrl}/api/tags`);
+      return response.ok;
+    } catch (error) {
+      console.error('Ollama health check failed:', error);
+      return false;
+    }
+  }
+
+  async ensureModelsExist() {
+    try {
+      const response = await fetch(`${this.baseUrl}/api/tags`);
+      const data = await response.json();
+      
+      const visionModelExists = data.models?.some(model => model.name.includes(this.visionModel));
+      const analysisModelExists = data.models?.some(model => model.name.includes(this.analysisModel));
+      
+      const missingModels = [];
+      if (!visionModelExists) missingModels.push(this.visionModel);
+      if (!analysisModelExists) missingModels.push(this.analysisModel);
+      
+      if (missingModels.length > 0) {
+        const modelList = missingModels.join(', ');
+        console.log(`Models not found: ${modelList}. Please pull them using: ollama pull <model_name>`);
+        throw new Error(`Models not available: ${modelList}. Please run: ${missingModels.map(m => `ollama pull ${m}`).join(' && ')}`);
+      }
+      
+      return true;
+    } catch (error) {
+      console.error('Model check failed:', error);
+      throw error;
+    }
+  }
+}
