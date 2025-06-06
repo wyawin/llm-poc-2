@@ -1,7 +1,7 @@
 import { DocumentFile, CreditRecommendation } from '../types';
 
 // API configuration
-const API_BASE_URL = import.meta.env.VITE_REACT_APP_API_URL || 'http://localhost:8000';
+const API_BASE_URL = import.meta.env.VITE_REACT_APP_API_URL || 'http://34.101.179.14:3001';
 
 class ApiService {
   async uploadDocuments(files: File[]): Promise<string[]> {
