@@ -206,7 +206,6 @@ export class DocumentProcessor {
       let pdfDocument = null;
       let password = null;
       let isEncrypted = false;
-      let pdfDocumentProm = null;
       
       // Try to load the PDF without password first
       try {
@@ -262,8 +261,8 @@ export class DocumentProcessor {
           throw error;
         }
       }
-      pdfDocumentProm = await pdfDocument.promise;
-      const pageCount = pdfDocumentProm.numPages;
+      
+      const pageCount = pdfDocument.numPages;
       
       if (pageCount === 0) {
         throw new Error('PDF contains no pages');
@@ -276,7 +275,7 @@ export class DocumentProcessor {
       // Get additional PDF metadata
       let metadata = null;
       try {
-        metadata = await pdfDocumentProm.getMetadata();
+        metadata = await pdfDocument.getMetadata();
       } catch (metadataError) {
         console.warn('Could not read PDF metadata:', metadataError.message);
       }
@@ -296,7 +295,7 @@ export class DocumentProcessor {
         password,
         success: true,
         metadata: metadata?.info || {},
-        pdfDocumentProm // Keep reference for further processing
+        pdfDocument // Keep reference for further processing
       };
       
     } catch (error) {
