@@ -1,5 +1,5 @@
 import React from 'react';
-import { User, DollarSign, CreditCard, TrendingUp, AlertTriangle, CheckCircle, XCircle } from 'lucide-react';
+import { User, DollarSign, CreditCard, TrendingUp, AlertTriangle, CheckCircle, XCircle, Building, Users, FileText, BarChart3 } from 'lucide-react';
 import { DocumentFile, CreditRecommendation } from '../types';
 
 interface AnalysisResultsProps {
@@ -58,6 +58,7 @@ const AnalysisResults: React.FC<AnalysisResultsProps> = ({ documents, recommenda
             </div>
           </div>
 
+          {/* Key Metrics */}
           <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
             <div className="bg-gray-50 rounded-lg p-4">
               <div className="flex items-center gap-2 mb-2">
@@ -102,33 +103,211 @@ const AnalysisResults: React.FC<AnalysisResultsProps> = ({ documents, recommenda
             )}
           </div>
 
-          <div className="space-y-4">
+          {/* Executive Summary */}
+          {recommendation.executiveSummary && (
+            <div className="mb-6 p-4 bg-blue-50 rounded-lg">
+              <h5 className="font-semibold text-gray-900 mb-2">Executive Summary</h5>
+              <p className="text-gray-700">{recommendation.executiveSummary}</p>
+            </div>
+          )}
+
+          {/* Enhanced Analysis Sections */}
+          {recommendation.businessOverview && (
+            <div className="mb-6">
+              <div className="flex items-center gap-2 mb-3">
+                <Building className="w-5 h-5 text-blue-600" />
+                <h5 className="font-semibold text-gray-900">Business Overview</h5>
+              </div>
+              <div className="grid md:grid-cols-2 gap-4">
+                <div className="bg-gray-50 rounded-lg p-3">
+                  <h6 className="font-medium text-gray-800 mb-1">Company Profile</h6>
+                  <p className="text-sm text-gray-700">{recommendation.businessOverview.companyProfile}</p>
+                </div>
+                <div className="bg-gray-50 rounded-lg p-3">
+                  <h6 className="font-medium text-gray-800 mb-1">Industry Analysis</h6>
+                  <p className="text-sm text-gray-700">{recommendation.businessOverview.industryAnalysis}</p>
+                </div>
+                <div className="bg-gray-50 rounded-lg p-3">
+                  <h6 className="font-medium text-gray-800 mb-1">Management Assessment</h6>
+                  <p className="text-sm text-gray-700">{recommendation.businessOverview.managementAssessment}</p>
+                </div>
+                <div className="bg-gray-50 rounded-lg p-3">
+                  <h6 className="font-medium text-gray-800 mb-1">Business Model</h6>
+                  <p className="text-sm text-gray-700">{recommendation.businessOverview.businessModelEvaluation}</p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Financial Analysis */}
+          {recommendation.financialAnalysis && (
+            <div className="mb-6">
+              <div className="flex items-center gap-2 mb-3">
+                <BarChart3 className="w-5 h-5 text-green-600" />
+                <h5 className="font-semibold text-gray-900">Financial Analysis</h5>
+              </div>
+              <div className="grid md:grid-cols-2 gap-4">
+                <div className="bg-gray-50 rounded-lg p-3">
+                  <h6 className="font-medium text-gray-800 mb-1">Revenue Analysis</h6>
+                  <p className="text-sm text-gray-700">{recommendation.financialAnalysis.revenueAnalysis}</p>
+                </div>
+                <div className="bg-gray-50 rounded-lg p-3">
+                  <h6 className="font-medium text-gray-800 mb-1">Profitability</h6>
+                  <p className="text-sm text-gray-700">{recommendation.financialAnalysis.profitabilityAssessment}</p>
+                </div>
+                <div className="bg-gray-50 rounded-lg p-3">
+                  <h6 className="font-medium text-gray-800 mb-1">Balance Sheet</h6>
+                  <p className="text-sm text-gray-700">{recommendation.financialAnalysis.balanceSheetStrength}</p>
+                </div>
+                <div className="bg-gray-50 rounded-lg p-3">
+                  <h6 className="font-medium text-gray-800 mb-1">Cash Flow</h6>
+                  <p className="text-sm text-gray-700">{recommendation.financialAnalysis.cashFlowAnalysis}</p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Financial Metrics */}
+          {recommendation.financialMetrics && (
+            <div className="mb-6">
+              <h5 className="font-semibold text-gray-900 mb-3">Key Financial Metrics</h5>
+              <div className="grid md:grid-cols-4 gap-4">
+                <div className="bg-green-50 rounded-lg p-3 text-center">
+                  <div className="text-lg font-bold text-green-600">
+                    ${recommendation.financialMetrics.totalRevenue.toLocaleString()}
+                  </div>
+                  <div className="text-sm text-gray-600">Total Revenue</div>
+                </div>
+                <div className="bg-blue-50 rounded-lg p-3 text-center">
+                  <div className="text-lg font-bold text-blue-600">
+                    ${recommendation.financialMetrics.totalAssets.toLocaleString()}
+                  </div>
+                  <div className="text-sm text-gray-600">Total Assets</div>
+                </div>
+                <div className="bg-purple-50 rounded-lg p-3 text-center">
+                  <div className="text-lg font-bold text-purple-600">
+                    {(recommendation.financialMetrics.profitMargin * 100).toFixed(1)}%
+                  </div>
+                  <div className="text-sm text-gray-600">Profit Margin</div>
+                </div>
+                <div className="bg-orange-50 rounded-lg p-3 text-center">
+                  <div className="text-lg font-bold text-orange-600">
+                    {(recommendation.financialMetrics.debtToAssetRatio * 100).toFixed(1)}%
+                  </div>
+                  <div className="text-sm text-gray-600">Debt-to-Asset</div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Insights */}
+          <div className="grid md:grid-cols-2 gap-6 mb-6">
             <div>
-              <h5 className="font-semibold text-gray-900 mb-2">Reasons for Decision:</h5>
+              <h5 className="font-semibold text-gray-900 mb-2 flex items-center gap-2">
+                <CheckCircle className="w-4 h-4 text-green-600" />
+                Key Strengths
+              </h5>
               <ul className="space-y-1">
-                {recommendation.reasons.map((reason, index) => (
+                {recommendation.keyStrengths.map((strength, index) => (
                   <li key={index} className="flex items-start gap-2 text-gray-700">
-                    <div className="w-2 h-2 bg-blue-600 rounded-full mt-2 flex-shrink-0" />
-                    {reason}
+                    <div className="w-2 h-2 bg-green-600 rounded-full mt-2 flex-shrink-0" />
+                    {strength}
                   </li>
                 ))}
               </ul>
             </div>
 
-            {recommendation.conditions && recommendation.conditions.length > 0 && (
-              <div>
-                <h5 className="font-semibold text-gray-900 mb-2">Conditions:</h5>
-                <ul className="space-y-1">
-                  {recommendation.conditions.map((condition, index) => (
-                    <li key={index} className="flex items-start gap-2 text-gray-700">
-                      <div className="w-2 h-2 bg-yellow-600 rounded-full mt-2 flex-shrink-0" />
-                      {condition}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
+            <div>
+              <h5 className="font-semibold text-gray-900 mb-2 flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4 text-yellow-600" />
+                Areas of Concern
+              </h5>
+              <ul className="space-y-1">
+                {recommendation.keyWeaknesses.map((weakness, index) => (
+                  <li key={index} className="flex items-start gap-2 text-gray-700">
+                    <div className="w-2 h-2 bg-yellow-600 rounded-full mt-2 flex-shrink-0" />
+                    {weakness}
+                  </li>
+                ))}
+              </ul>
+            </div>
           </div>
+
+          {/* Risk Factors and Mitigation */}
+          <div className="grid md:grid-cols-2 gap-6 mb-6">
+            <div>
+              <h5 className="font-semibold text-gray-900 mb-2 flex items-center gap-2">
+                <XCircle className="w-4 h-4 text-red-600" />
+                Risk Factors
+              </h5>
+              <ul className="space-y-1">
+                {recommendation.riskFactors.map((risk, index) => (
+                  <li key={index} className="flex items-start gap-2 text-gray-700">
+                    <div className="w-2 h-2 bg-red-600 rounded-full mt-2 flex-shrink-0" />
+                    {risk}
+                  </li>
+                ))}
+              </ul>
+            </div>
+
+            <div>
+              <h5 className="font-semibold text-gray-900 mb-2 flex items-center gap-2">
+                <TrendingUp className="w-4 h-4 text-blue-600" />
+                Mitigation Strategies
+              </h5>
+              <ul className="space-y-1">
+                {recommendation.mitigationStrategies.map((strategy, index) => (
+                  <li key={index} className="flex items-start gap-2 text-gray-700">
+                    <div className="w-2 h-2 bg-blue-600 rounded-full mt-2 flex-shrink-0" />
+                    {strategy}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </div>
+
+          {/* Conditions */}
+          {recommendation.conditions && recommendation.conditions.length > 0 && (
+            <div className="mb-6">
+              <h5 className="font-semibold text-gray-900 mb-2">Conditions:</h5>
+              <ul className="space-y-1">
+                {recommendation.conditions.map((condition, index) => (
+                  <li key={index} className="flex items-start gap-2 text-gray-700">
+                    <div className="w-2 h-2 bg-yellow-600 rounded-full mt-2 flex-shrink-0" />
+                    {condition}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {/* Document Summary */}
+          {recommendation.documentSummary && (
+            <div className="pt-4 border-t">
+              <h5 className="font-semibold text-gray-900 mb-2 flex items-center gap-2">
+                <FileText className="w-4 h-4 text-gray-600" />
+                Document Analysis Summary
+              </h5>
+              <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-4 text-sm">
+                <div>
+                  <span className="font-medium text-gray-700">Documents Analyzed:</span>
+                  <div className="text-gray-600">{recommendation.documentSummary.totalDocuments}</div>
+                </div>
+                <div>
+                  <span className="font-medium text-gray-700">Document Types:</span>
+                  <div className="text-gray-600">{recommendation.documentSummary.documentTypes.join(', ')}</div>
+                </div>
+                <div>
+                  <span className="font-medium text-gray-700">Companies:</span>
+                  <div className="text-gray-600">{recommendation.documentSummary.companiesAnalyzed.join(', ')}</div>
+                </div>
+                <div>
+                  <span className="font-medium text-gray-700">Confidence:</span>
+                  <div className="text-gray-600">{((recommendation.confidenceLevel || 0) * 100).toFixed(0)}%</div>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -142,15 +321,15 @@ const AnalysisResults: React.FC<AnalysisResultsProps> = ({ documents, recommenda
 
             {doc.extractedData && (
               <div className="space-y-6">
-                {/* Personal Information */}
-                {doc.extractedData.personalInfo && (
+                {/* Company Information */}
+                {doc.extractedData.companyInfo && Object.keys(doc.extractedData.companyInfo).length > 0 && (
                   <div>
                     <div className="flex items-center gap-2 mb-3">
-                      <User className="w-5 h-5 text-blue-600" />
-                      <h5 className="font-semibold text-gray-900">Personal Information</h5>
+                      <Building className="w-5 h-5 text-blue-600" />
+                      <h5 className="font-semibold text-gray-900">Company Information</h5>
                     </div>
                     <div className="grid md:grid-cols-2 gap-4">
-                      {Object.entries(doc.extractedData.personalInfo).map(([key, value]) => (
+                      {Object.entries(doc.extractedData.companyInfo).map(([key, value]) => (
                         value && (
                           <div key={key} className="bg-gray-50 rounded-lg p-3">
                             <span className="text-sm font-medium text-gray-600 capitalize">
@@ -164,6 +343,31 @@ const AnalysisResults: React.FC<AnalysisResultsProps> = ({ documents, recommenda
                   </div>
                 )}
 
+                {/* Personal Information */}
+                {doc.extractedData.personalInfo?.individuals && doc.extractedData.personalInfo.individuals.length > 0 && (
+                  <div>
+                    <div className="flex items-center gap-2 mb-3">
+                      <Users className="w-5 h-5 text-purple-600" />
+                      <h5 className="font-semibold text-gray-900">Key Personnel</h5>
+                    </div>
+                    <div className="grid gap-4">
+                      {doc.extractedData.personalInfo.individuals.map((individual, index) => (
+                        <div key={index} className="bg-gray-50 rounded-lg p-4">
+                          <div className="flex justify-between items-start mb-2">
+                            <div className="font-medium text-gray-900">{individual.name}</div>
+                            <div className="text-sm text-gray-600">{individual.position}</div>
+                          </div>
+                          {individual.ownershipPercentage && (
+                            <div className="text-sm text-gray-600">
+                              Ownership: {individual.ownershipPercentage}%
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
                 {/* Financial Information */}
                 {doc.extractedData.financialInfo && (
                   <div>
@@ -172,8 +376,50 @@ const AnalysisResults: React.FC<AnalysisResultsProps> = ({ documents, recommenda
                       <h5 className="font-semibold text-gray-900">Financial Information</h5>
                     </div>
 
+                    {/* Profit & Loss */}
+                    {doc.extractedData.financialInfo.profitLoss && Object.keys(doc.extractedData.financialInfo.profitLoss).length > 0 && (
+                      <div className="mb-4">
+                        <h6 className="font-medium text-gray-800 mb-2">Profit & Loss</h6>
+                        <div className="grid md:grid-cols-3 gap-4">
+                          {Object.entries(doc.extractedData.financialInfo.profitLoss).map(([key, value]) => (
+                            value && (
+                              <div key={key} className="bg-green-50 rounded-lg p-3">
+                                <div className="text-sm font-medium text-gray-600 capitalize">
+                                  {key.replace(/([A-Z])/g, ' $1').trim()}
+                                </div>
+                                <div className="text-lg font-bold text-green-600">
+                                  {typeof value === 'number' ? `$${value.toLocaleString()}` : value}
+                                </div>
+                              </div>
+                            )
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Balance Sheet */}
+                    {doc.extractedData.financialInfo.balanceSheet && Object.keys(doc.extractedData.financialInfo.balanceSheet).length > 0 && (
+                      <div className="mb-4">
+                        <h6 className="font-medium text-gray-800 mb-2">Balance Sheet</h6>
+                        <div className="grid md:grid-cols-3 gap-4">
+                          {Object.entries(doc.extractedData.financialInfo.balanceSheet).map(([key, value]) => (
+                            value && (
+                              <div key={key} className="bg-blue-50 rounded-lg p-3">
+                                <div className="text-sm font-medium text-gray-600 capitalize">
+                                  {key.replace(/([A-Z])/g, ' $1').trim()}
+                                </div>
+                                <div className="text-lg font-bold text-blue-600">
+                                  {typeof value === 'number' ? `$${value.toLocaleString()}` : value}
+                                </div>
+                              </div>
+                            )
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
                     {/* Bank Statements */}
-                    {doc.extractedData.financialInfo.bankStatements && (
+                    {doc.extractedData.financialInfo.bankStatements && doc.extractedData.financialInfo.bankStatements.length > 0 && (
                       <div className="mb-4">
                         <h6 className="font-medium text-gray-800 mb-2">Bank Statements</h6>
                         {doc.extractedData.financialInfo.bankStatements.map((statement, index) => (
@@ -184,6 +430,7 @@ const AnalysisResults: React.FC<AnalysisResultsProps> = ({ documents, recommenda
                                 ${statement.balance.toLocaleString()}
                               </span>
                             </div>
+                            <p className="text-sm text-gray-600">Type: {statement.accountType}</p>
                             <p className="text-sm text-gray-600">Period: {statement.period}</p>
                             <p className="text-sm text-gray-600">
                               {statement.transactions.length} transactions
@@ -192,51 +439,12 @@ const AnalysisResults: React.FC<AnalysisResultsProps> = ({ documents, recommenda
                         ))}
                       </div>
                     )}
-
-                    {/* Assets and Liabilities */}
-                    <div className="grid md:grid-cols-2 gap-4">
-                      {doc.extractedData.financialInfo.assets && (
-                        <div>
-                          <h6 className="font-medium text-gray-800 mb-2">Assets</h6>
-                          {doc.extractedData.financialInfo.assets.map((asset, index) => (
-                            <div key={index} className="bg-green-50 rounded-lg p-3 mb-2">
-                              <div className="flex justify-between">
-                                <span className="font-medium">{asset.type}</span>
-                                <span className="text-green-600 font-bold">
-                                  ${asset.value.toLocaleString()}
-                                </span>
-                              </div>
-                              <p className="text-sm text-gray-600">{asset.description}</p>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-
-                      {doc.extractedData.financialInfo.liabilities && (
-                        <div>
-                          <h6 className="font-medium text-gray-800 mb-2">Liabilities</h6>
-                          {doc.extractedData.financialInfo.liabilities.map((liability, index) => (
-                            <div key={index} className="bg-red-50 rounded-lg p-3 mb-2">
-                              <div className="flex justify-between">
-                                <span className="font-medium">{liability.type}</span>
-                                <span className="text-red-600 font-bold">
-                                  ${liability.amount.toLocaleString()}
-                                </span>
-                              </div>
-                              <p className="text-sm text-gray-600">
-                                Monthly: ${liability.monthlyPayment.toLocaleString()}
-                              </p>
-                              <p className="text-sm text-gray-600">Creditor: {liability.creditor}</p>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
                   </div>
                 )}
 
                 <div className="text-xs text-gray-500 pt-4 border-t">
                   Document Type: {doc.extractedData.documentType} | 
+                  Confidence: {(doc.extractedData.confidence * 100).toFixed(0)}% |
                   Extracted: {new Date(doc.extractedData.extractionDate).toLocaleString()}
                 </div>
               </div>

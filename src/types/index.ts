@@ -11,27 +11,57 @@ export interface DocumentFile {
 }
 
 export interface ExtractedData {
-  personalInfo: {
+  documentType: string;
+  companyInfo: {
     name?: string;
-    dateOfBirth?: string;
+    registrationNumber?: string;
     address?: string;
-    phone?: string;
-    email?: string;
-    employmentStatus?: string;
-    income?: string;
+    industry?: string;
+    establishmentDate?: string;
+    legalStructure?: string;
+  };
+  personalInfo: {
+    individuals: Array<{
+      name: string;
+      position: string;
+      address?: string;
+      phone?: string;
+      email?: string;
+      ownershipPercentage?: number;
+    }>;
   };
   financialInfo: {
-    bankStatements?: BankStatement[];
-    creditHistory?: CreditEntry[];
-    assets?: Asset[];
-    liabilities?: Liability[];
+    profitLoss: {
+      revenue?: number;
+      expenses?: number;
+      netIncome?: number;
+      period?: string;
+    };
+    balanceSheet: {
+      totalAssets?: number;
+      totalLiabilities?: number;
+      equity?: number;
+      asOfDate?: string;
+    };
+    bankStatements: BankStatement[];
+    creditInfo: {
+      creditScore?: number;
+      creditHistory: CreditEntry[];
+    };
+    cashFlow: {
+      operatingCashFlow?: number;
+      investingCashFlow?: number;
+      financingCashFlow?: number;
+      period?: string;
+    };
   };
-  documentType: string;
   extractionDate: string;
+  confidence: number;
 }
 
 export interface BankStatement {
   accountNumber: string;
+  accountType: string;
   balance: number;
   transactions: Transaction[];
   period: string;
@@ -46,30 +76,74 @@ export interface Transaction {
 
 export interface CreditEntry {
   creditor: string;
-  amount: number;
-  status: 'current' | 'overdue' | 'paid';
-  paymentHistory: string;
-}
-
-export interface Asset {
-  type: string;
-  value: number;
-  description: string;
-}
-
-export interface Liability {
-  type: string;
-  amount: number;
-  monthlyPayment: number;
-  creditor: string;
+  accountType: string;
+  balance: number;
+  paymentStatus: string;
+  monthlyPayment?: number;
 }
 
 export interface CreditRecommendation {
   score: number;
   recommendation: 'approve' | 'conditional' | 'decline';
-  reasons: string[];
-  conditions?: string[];
   riskLevel: 'low' | 'medium' | 'high';
   creditLimit?: number;
   interestRate?: number;
+  
+  // Enhanced analysis from Ollama
+  businessOverview?: {
+    companyProfile: string;
+    industryAnalysis: string;
+    managementAssessment: string;
+    businessModelEvaluation: string;
+  };
+  financialAnalysis?: {
+    revenueAnalysis: string;
+    profitabilityAssessment: string;
+    balanceSheetStrength: string;
+    cashFlowAnalysis: string;
+    debtCapacity: string;
+  };
+  creditRiskAssessment?: {
+    paymentHistoryEvaluation: string;
+    debtRatios: string;
+    liquidityPosition: string;
+    overallCreditworthiness: string;
+  };
+  
+  // Insights and recommendations
+  keyStrengths: string[];
+  keyWeaknesses: string[];
+  riskFactors: string[];
+  mitigationStrategies: string[];
+  
+  // Detailed reasoning
+  reasons: string[];
+  conditions?: string[];
+  
+  // Summary and metadata
+  executiveSummary?: string;
+  confidenceLevel?: number;
+  analysisDate: string;
+  documentsAnalyzed: number;
+  
+  // Document breakdown
+  documentSummary?: {
+    totalDocuments: number;
+    documentTypes: string[];
+    companiesAnalyzed: string[];
+    individualsIdentified: string[];
+    timePeriodsAnalyzed: string[];
+  };
+  
+  // Financial metrics
+  financialMetrics?: {
+    totalRevenue: number;
+    totalAssets: number;
+    totalLiabilities: number;
+    netIncome: number;
+    operatingCashFlow: number;
+    debtToAssetRatio: number;
+    profitMargin: number;
+    returnOnAssets: number;
+  };
 }
