@@ -10,7 +10,7 @@ export class OllamaService {
     // Create axios instance with default configuration
     this.axiosInstance = axios.create({
       baseURL: this.baseUrl,
-      timeout: 300000, // 5 minutes timeout for AI processing
+      // timeout: 300000, // 5 minutes timeout for AI processing
       headers: {
         'Content-Type': 'application/json',
       },
