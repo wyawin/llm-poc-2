@@ -134,22 +134,35 @@ Only return valid JSON. If information is not available, use null for strings/nu
       }
 
       const result = await response.json();
+      console.log('Raw Ollama vision response:', result.response?.substring(0, 200) + '...');
       
       // Parse the JSON response from Ollama
       let extractedData;
       try {
         // Clean the response text to extract JSON
         const responseText = result.response.trim();
-        const jsonMatch = responseText.match(/\{[\s\S]*\}/);
+        
+        // Try to find JSON in the response
+        let jsonMatch = responseText.match(/\{[\s\S]*\}/);
+        
+        if (!jsonMatch) {
+          // If no JSON found, try to extract from code blocks
+          const codeBlockMatch = responseText.match(/```(?:json)?\s*(\{[\s\S]*?\})\s*```/);
+          if (codeBlockMatch) {
+            jsonMatch = [codeBlockMatch[1]];
+          }
+        }
         
         if (jsonMatch) {
-          extractedData = JSON.parse(jsonMatch[0]);
+          const jsonString = jsonMatch[0];
+          console.log('Extracted JSON string:', jsonString.substring(0, 200) + '...');
+          extractedData = JSON.parse(jsonString);
         } else {
           throw new Error('No valid JSON found in response');
         }
       } catch (parseError) {
         console.error('Failed to parse Ollama response:', parseError);
-        console.log('Raw response:', result.response);
+        console.log('Full raw response:', result.response);
         
         // Return a default structure if parsing fails
         extractedData = {
@@ -165,13 +178,19 @@ Only return valid JSON. If information is not available, use null for strings/nu
           },
           extractionDate: new Date().toISOString(),
           confidence: 0.1,
-          rawResponse: result.response
+          rawResponse: result.response,
+          parseError: parseError.message
         };
       }
 
       // Ensure extractionDate is set
       if (!extractedData.extractionDate) {
         extractedData.extractionDate = new Date().toISOString();
+      }
+
+      // Ensure confidence is set
+      if (typeof extractedData.confidence !== 'number') {
+        extractedData.confidence = 0.5;
       }
 
       console.log(`Successfully extracted data from image: ${imagePath}`);
@@ -253,16 +272,16 @@ Return your analysis in this JSON structure:
   "recommendation": {
     "decision": "approve|conditional|decline",
     "reasoning": "string",
-    "conditions": ["string"] // if conditional
+    "conditions": ["string"]
   },
   "scoring": {
-    "creditScore": number, // 300-850
+    "creditScore": number,
     "riskRating": "Low|Medium|High",
     "creditLimit": number,
     "interestRate": number,
-    "confidenceLevel": number // 0-1
+    "confidenceLevel": number
   },
-  "summary": "string", // Executive summary
+  "summary": "string",
   "analysisDate": "ISO date string"
 }
 
@@ -290,21 +309,34 @@ Provide detailed, professional analysis based on the available data. If certain 
       }
 
       const result = await response.json();
+      console.log('Raw Ollama analysis response:', result.response?.substring(0, 200) + '...');
       
       // Parse the JSON response
       let insights;
       try {
         const responseText = result.response.trim();
-        const jsonMatch = responseText.match(/\{[\s\S]*\}/);
+        
+        // Try to find JSON in the response
+        let jsonMatch = responseText.match(/\{[\s\S]*\}/);
+        
+        if (!jsonMatch) {
+          // If no JSON found, try to extract from code blocks
+          const codeBlockMatch = responseText.match(/```(?:json)?\s*(\{[\s\S]*?\})\s*```/);
+          if (codeBlockMatch) {
+            jsonMatch = [codeBlockMatch[1]];
+          }
+        }
         
         if (jsonMatch) {
-          insights = JSON.parse(jsonMatch[0]);
+          const jsonString = jsonMatch[0];
+          console.log('Extracted insights JSON string:', jsonString.substring(0, 200) + '...');
+          insights = JSON.parse(jsonString);
         } else {
           throw new Error('No valid JSON found in response');
         }
       } catch (parseError) {
         console.error('Failed to parse insights response:', parseError);
-        console.log('Raw response:', result.response);
+        console.log('Full raw response:', result.response);
         
         // Return a fallback structure
         insights = {
@@ -347,7 +379,8 @@ Provide detailed, professional analysis based on the available data. If certain 
           },
           summary: "Credit analysis could not be completed due to technical issues.",
           analysisDate: new Date().toISOString(),
-          rawResponse: result.response
+          rawResponse: result.response,
+          parseError: parseError.message
         };
       }
 

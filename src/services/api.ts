@@ -5,36 +5,82 @@ const API_BASE_URL = import.meta.env.VITE_REACT_APP_API_URL || 'http://localhost
 
 class ApiService {
   async uploadDocuments(files: File[]): Promise<string[]> {
-    const formData = new FormData();
-    files.forEach(file => {
-      formData.append('documents', file);
-    });
+    try {
+      console.log(`Uploading ${files.length} files to backend...`);
+      
+      const formData = new FormData();
+      files.forEach(file => {
+        formData.append('documents', file);
+        console.log(`Added file to FormData: ${file.name} (${file.size} bytes)`);
+      });
 
-    const response = await fetch(`${API_BASE_URL}/upload`, {
-      method: 'POST',
-      body: formData,
-    });
+      const response = await fetch(`${API_BASE_URL}/upload`, {
+        method: 'POST',
+        body: formData,
+      });
 
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({ error: 'Upload failed' }));
-      throw new Error(errorData.error || `Upload failed: ${response.statusText}`);
+      console.log(`Upload response status: ${response.status}`);
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('Upload error response:', errorText);
+        
+        let errorData;
+        try {
+          errorData = JSON.parse(errorText);
+        } catch {
+          errorData = { error: errorText || 'Upload failed' };
+        }
+        
+        throw new Error(errorData.error || `Upload failed: ${response.statusText}`);
+      }
+
+      const result = await response.json();
+      console.log('Upload successful, received:', result);
+      
+      if (!result.document_ids || !Array.isArray(result.document_ids)) {
+        throw new Error('Invalid response format: missing document_ids array');
+      }
+      
+      return result.document_ids;
+    } catch (error) {
+      console.error('Upload error:', error);
+      throw error;
     }
-
-    const result = await response.json();
-    return result.document_ids;
   }
 
   async processDocument(documentId: string): Promise<void> {
-    const response = await fetch(`${API_BASE_URL}/process/${documentId}`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-    });
+    try {
+      console.log(`Starting processing for document ID: ${documentId}`);
+      
+      const response = await fetch(`${API_BASE_URL}/process/${documentId}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
 
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({ error: 'Processing failed' }));
-      throw new Error(errorData.error || `Processing failed: ${response.statusText}`);
+      console.log(`Process response status: ${response.status}`);
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('Process error response:', errorText);
+        
+        let errorData;
+        try {
+          errorData = JSON.parse(errorText);
+        } catch {
+          errorData = { error: errorText || 'Processing failed' };
+        }
+        
+        throw new Error(errorData.error || `Processing failed: ${response.statusText}`);
+      }
+
+      const result = await response.json();
+      console.log('Processing started successfully:', result);
+    } catch (error) {
+      console.error('Process document error:', error);
+      throw error;
     }
   }
 
@@ -46,30 +92,72 @@ class ApiService {
     error?: string;
     extracted_data?: any;
   }> {
-    const response = await fetch(`${API_BASE_URL}/status/${documentId}`);
-    
-    if (!response.ok) {
-      throw new Error(`Status check failed: ${response.statusText}`);
-    }
+    try {
+      const response = await fetch(`${API_BASE_URL}/status/${documentId}`);
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('Status check error response:', errorText);
+        throw new Error(`Status check failed: ${response.statusText}`);
+      }
 
-    return await response.json();
+      const result = await response.json();
+      
+      // Validate response structure
+      if (!result.document_id || !result.status) {
+        console.error('Invalid status response:', result);
+        throw new Error('Invalid status response format');
+      }
+      
+      return result;
+    } catch (error) {
+      console.error('Get processing status error:', error);
+      throw error;
+    }
   }
 
   async generateCreditRecommendation(documentIds: string[]): Promise<CreditRecommendation> {
-    const response = await fetch(`${API_BASE_URL}/recommend`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ document_ids: documentIds }),
-    });
+    try {
+      console.log(`Generating credit recommendation for documents:`, documentIds);
+      
+      const response = await fetch(`${API_BASE_URL}/recommend`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ document_ids: documentIds }),
+      });
 
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({ error: 'Recommendation failed' }));
-      throw new Error(errorData.error || `Recommendation failed: ${response.statusText}`);
+      console.log(`Recommendation response status: ${response.status}`);
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('Recommendation error response:', errorText);
+        
+        let errorData;
+        try {
+          errorData = JSON.parse(errorText);
+        } catch {
+          errorData = { error: errorText || 'Recommendation failed' };
+        }
+        
+        throw new Error(errorData.error || `Recommendation failed: ${response.statusText}`);
+      }
+
+      const result = await response.json();
+      console.log('Credit recommendation received:', result);
+      
+      // Validate recommendation structure
+      if (!result.score && !result.recommendation) {
+        console.error('Invalid recommendation response:', result);
+        throw new Error('Invalid recommendation response format');
+      }
+      
+      return result;
+    } catch (error) {
+      console.error('Generate credit recommendation error:', error);
+      throw error;
     }
-
-    return await response.json();
   }
 
   async checkHealth(): Promise<{
@@ -80,9 +168,15 @@ class ApiService {
     error?: string;
   }> {
     try {
+      console.log('Checking backend health...');
+      
       const response = await fetch(`${API_BASE_URL}/health`);
-      return await response.json();
+      const result = await response.json();
+      
+      console.log('Health check result:', result);
+      return result;
     } catch (error) {
+      console.error('Health check error:', error);
       return {
         status: 'Error',
         timestamp: new Date().toISOString(),
@@ -101,13 +195,18 @@ class ApiService {
       error?: string;
     }>;
   }> {
-    const response = await fetch(`${API_BASE_URL}/documents`);
-    
-    if (!response.ok) {
-      throw new Error(`Failed to get documents: ${response.statusText}`);
-    }
+    try {
+      const response = await fetch(`${API_BASE_URL}/documents`);
+      
+      if (!response.ok) {
+        throw new Error(`Failed to get documents: ${response.statusText}`);
+      }
 
-    return await response.json();
+      return await response.json();
+    } catch (error) {
+      console.error('Get all documents error:', error);
+      throw error;
+    }
   }
 }
 

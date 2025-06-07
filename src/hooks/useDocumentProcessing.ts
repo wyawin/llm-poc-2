@@ -76,7 +76,14 @@ export const useDocumentProcessing = () => {
 
   const pollDocumentStatus = useCallback(async (localId: string, backendId: string) => {
     try {
+      console.log(`Polling status for document ${localId} (backend: ${backendId})`);
       const status = await apiService.getProcessingStatus(backendId);
+      
+      console.log(`Status update for ${localId}:`, {
+        status: status.status,
+        progress: status.progress,
+        hasExtractedData: !!status.extracted_data
+      });
       
       updateDocumentStatus(localId, {
         status: status.status,
@@ -91,6 +98,7 @@ export const useDocumentProcessing = () => {
         if (interval) {
           clearInterval(interval);
           processingIntervals.current.delete(localId);
+          console.log(`Stopped polling for ${localId} - status: ${status.status}`);
         }
       }
     } catch (error) {
@@ -194,6 +202,9 @@ export const useDocumentProcessing = () => {
           
           const hasCompletedDocs = processingDocs.some(doc => doc.status === 'completed');
 
+          console.log(`Completion check - All completed: ${allCompleted}, Has completed: ${hasCompletedDocs}`);
+          console.log('Document statuses:', processingDocs.map(doc => ({ name: doc.name, status: doc.status })));
+
           if (allCompleted) {
             console.log('All documents completed processing');
             
@@ -214,7 +225,12 @@ export const useDocumentProcessing = () => {
                   
                   console.log('Completed backend IDs for recommendation:', completedBackendIds);
                   
+                  if (completedBackendIds.length === 0) {
+                    throw new Error('No completed documents found for recommendation');
+                  }
+                  
                   const creditRec = await apiService.generateCreditRecommendation(completedBackendIds);
+                  console.log('Credit recommendation received:', creditRec);
                   setRecommendation(creditRec);
                   console.log('Credit recommendation generated successfully');
                 } catch (error) {
