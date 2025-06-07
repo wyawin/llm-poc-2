@@ -3,7 +3,7 @@ import fs from 'fs/promises';
 import { fileURLToPath } from 'url';
 import sharp from 'sharp';
 import { fromPath } from 'pdf2pic';
-import * as pdfjsLib from 'pdfjs-dist';
+import * as pdfjsLib from 'pdfjs-dist/legacy/build/pdf.min.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
