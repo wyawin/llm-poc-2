@@ -77,7 +77,7 @@ app.get('/health', async (req, res) => {
   try {
     const ollamaHealth = await ollamaService.checkHealth();
     await ollamaService.ensureModelsExist();
-    
+    console.log('health', ollamaHealth);
     res.json({ 
       status: 'OK', 
       timestamp: new Date().toISOString(),
