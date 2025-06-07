@@ -10,6 +10,7 @@ export const useDocumentProcessing = () => {
   const processingIntervals = useRef<Map<string, NodeJS.Timeout>>(new Map());
   const documentIdMap = useRef<Map<string, string>>(new Map()); // Maps local ID to backend ID
   const completionCheckInterval = useRef<NodeJS.Timeout | null>(null);
+  const isProcessingRef = useRef(false); // Prevent duplicate processing
 
   // Check backend health on mount
   useEffect(() => {
@@ -108,133 +109,145 @@ export const useDocumentProcessing = () => {
   }, [updateDocumentStatus]);
 
   const processDocuments = useCallback(async () => {
+    // Prevent duplicate processing
+    if (isProcessingRef.current) {
+      console.log('Processing already in progress, skipping...');
+      return;
+    }
+
     if (backendHealth !== 'connected') {
       alert('Backend is not connected. Please check if the server is running and Ollama models are available.');
       return;
     }
 
+    // Get pending documents at the start
+    const currentDocs = documents.filter(doc => doc.status === 'pending');
+    
+    if (currentDocs.length === 0) {
+      console.log('No pending documents to process');
+      return;
+    }
+
+    // Set processing flags
+    isProcessingRef.current = true;
     setIsProcessing(true);
     setRecommendation(null);
 
+    console.log(`Starting to process ${currentDocs.length} documents...`);
+
     try {
-      // Get current pending documents
-      setDocuments(currentDocs => {
-        const pendingDocs = currentDocs.filter(doc => doc.status === 'pending');
-        
-        if (pendingDocs.length === 0) {
-          setIsProcessing(false);
-          return currentDocs;
-        }
+      // Step 1: Upload documents
+      console.log('Uploading documents...');
+      const files = currentDocs.map(doc => doc.file);
+      const backendIds = await apiService.uploadDocuments(files);
 
-        // Process documents asynchronously
-        (async () => {
-          try {
-            // Step 1: Upload documents
-            console.log('Uploading documents...');
-            const files = pendingDocs.map(doc => doc.file);
-            const backendIds = await apiService.uploadDocuments(files);
+      console.log(`Uploaded ${backendIds.length} documents, received IDs:`, backendIds);
 
-            // Map local IDs to backend IDs
-            pendingDocs.forEach((doc, index) => {
-              documentIdMap.current.set(doc.id, backendIds[index]);
-            });
-
-            // Step 2: Start processing each document
-            for (let i = 0; i < pendingDocs.length; i++) {
-              const doc = pendingDocs[i];
-              const backendId = backendIds[i];
-
-              try {
-                updateDocumentStatus(doc.id, { status: 'processing', progress: 0 });
-                
-                // Start processing on backend
-                await apiService.processDocument(backendId);
-                
-                // Start polling for status updates
-                const pollInterval = setInterval(() => {
-                  pollDocumentStatus(doc.id, backendId);
-                }, 2000); // Poll every 2 seconds
-                
-                processingIntervals.current.set(doc.id, pollInterval);
-                
-              } catch (error) {
-                console.error(`Failed to start processing for ${doc.name}:`, error);
-                updateDocumentStatus(doc.id, {
-                  status: 'error',
-                  error: error instanceof Error ? error.message : 'Processing failed to start'
-                });
-              }
-            }
-
-            // Step 3: Start checking for completion
-            if (completionCheckInterval.current) {
-              clearInterval(completionCheckInterval.current);
-            }
-
-            completionCheckInterval.current = setInterval(() => {
-              setDocuments(currentDocs => {
-                const processingDocs = currentDocs.filter(doc => 
-                  pendingDocs.some(pendingDoc => pendingDoc.id === doc.id)
-                );
-                
-                const allCompleted = processingDocs.every(doc => 
-                  doc.status === 'completed' || doc.status === 'error'
-                );
-                
-                const hasCompletedDocs = processingDocs.some(doc => doc.status === 'completed');
-
-                if (allCompleted) {
-                  if (completionCheckInterval.current) {
-                    clearInterval(completionCheckInterval.current);
-                    completionCheckInterval.current = null;
-                  }
-                  
-                  if (hasCompletedDocs) {
-                    // Generate recommendation
-                    (async () => {
-                      try {
-                        console.log('Generating credit recommendation...');
-                        const completedBackendIds = processingDocs
-                          .filter(doc => doc.status === 'completed')
-                          .map(doc => documentIdMap.current.get(doc.id))
-                          .filter(id => id) as string[];
-                        
-                        const creditRec = await apiService.generateCreditRecommendation(completedBackendIds);
-                        setRecommendation(creditRec);
-                      } catch (error) {
-                        console.error('Failed to generate recommendation:', error);
-                        alert(`Failed to generate recommendation: ${error instanceof Error ? error.message : 'Unknown error'}`);
-                      } finally {
-                        setIsProcessing(false);
-                      }
-                    })();
-                  } else {
-                    setIsProcessing(false);
-                  }
-                }
-
-                return currentDocs;
-              });
-            }, 3000); // Check every 3 seconds
-
-          } catch (error) {
-            console.error('Processing failed:', error);
-            alert(`Processing failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
-            setIsProcessing(false);
-          }
-        })();
-
-        return currentDocs;
+      // Map local IDs to backend IDs
+      currentDocs.forEach((doc, index) => {
+        documentIdMap.current.set(doc.id, backendIds[index]);
+        console.log(`Mapped ${doc.name} (${doc.id}) to backend ID: ${backendIds[index]}`);
       });
 
+      // Step 2: Start processing each document
+      for (let i = 0; i < currentDocs.length; i++) {
+        const doc = currentDocs[i];
+        const backendId = backendIds[i];
+
+        try {
+          console.log(`Starting processing for ${doc.name} (${backendId})`);
+          updateDocumentStatus(doc.id, { status: 'processing', progress: 0 });
+          
+          // Start processing on backend
+          await apiService.processDocument(backendId);
+          
+          // Start polling for status updates
+          const pollInterval = setInterval(() => {
+            pollDocumentStatus(doc.id, backendId);
+          }, 2000); // Poll every 2 seconds
+          
+          processingIntervals.current.set(doc.id, pollInterval);
+          
+        } catch (error) {
+          console.error(`Failed to start processing for ${doc.name}:`, error);
+          updateDocumentStatus(doc.id, {
+            status: 'error',
+            error: error instanceof Error ? error.message : 'Processing failed to start'
+          });
+        }
+      }
+
+      // Step 3: Start checking for completion
+      if (completionCheckInterval.current) {
+        clearInterval(completionCheckInterval.current);
+      }
+
+      const processedDocIds = new Set(currentDocs.map(doc => doc.id));
+
+      completionCheckInterval.current = setInterval(() => {
+        setDocuments(latestDocs => {
+          const processingDocs = latestDocs.filter(doc => processedDocIds.has(doc.id));
+          
+          const allCompleted = processingDocs.every(doc => 
+            doc.status === 'completed' || doc.status === 'error'
+          );
+          
+          const hasCompletedDocs = processingDocs.some(doc => doc.status === 'completed');
+
+          if (allCompleted) {
+            console.log('All documents completed processing');
+            
+            if (completionCheckInterval.current) {
+              clearInterval(completionCheckInterval.current);
+              completionCheckInterval.current = null;
+            }
+            
+            if (hasCompletedDocs) {
+              // Generate recommendation
+              (async () => {
+                try {
+                  console.log('Generating credit recommendation...');
+                  const completedBackendIds = processingDocs
+                    .filter(doc => doc.status === 'completed')
+                    .map(doc => documentIdMap.current.get(doc.id))
+                    .filter(id => id) as string[];
+                  
+                  console.log('Completed backend IDs for recommendation:', completedBackendIds);
+                  
+                  const creditRec = await apiService.generateCreditRecommendation(completedBackendIds);
+                  setRecommendation(creditRec);
+                  console.log('Credit recommendation generated successfully');
+                } catch (error) {
+                  console.error('Failed to generate recommendation:', error);
+                  alert(`Failed to generate recommendation: ${error instanceof Error ? error.message : 'Unknown error'}`);
+                } finally {
+                  setIsProcessing(false);
+                  isProcessingRef.current = false;
+                }
+              })();
+            } else {
+              console.log('No completed documents for recommendation');
+              setIsProcessing(false);
+              isProcessingRef.current = false;
+            }
+          }
+
+          return latestDocs;
+        });
+      }, 3000); // Check every 3 seconds
+
     } catch (error) {
-      console.error('Processing setup failed:', error);
+      console.error('Processing failed:', error);
       alert(`Processing failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
       setIsProcessing(false);
+      isProcessingRef.current = false;
     }
-  }, [backendHealth, pollDocumentStatus, updateDocumentStatus]);
+  }, [documents, backendHealth, pollDocumentStatus, updateDocumentStatus]);
 
   const resetAnalysis = useCallback(() => {
+    // Clear processing flag
+    isProcessingRef.current = false;
+    
     // Clear all intervals
     processingIntervals.current.forEach(interval => clearInterval(interval));
     processingIntervals.current.clear();
