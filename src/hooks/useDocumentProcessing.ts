@@ -73,6 +73,8 @@ export const useDocumentProcessing = () => {
         extractedData: status.extracted_data
       });
 
+      console.log(localId, status.status)
+
       // If completed or error, stop polling
       if (status.status === 'completed' || status.status === 'error') {
         const interval = processingIntervals.current.get(localId);
