@@ -14,6 +14,15 @@ const AnalysisResults: React.FC<AnalysisResultsProps> = ({ documents, recommenda
     return null;
   }
 
+  const formatCurrency = (amount: number) => {
+    return new Intl.NumberFormat('id-ID', {
+      style: 'currency',
+      currency: 'IDR',
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0
+    }).format(amount);
+  };
+
   const getRecommendationColor = (rec: string) => {
     switch (rec) {
       case 'approve': return 'text-green-600 bg-green-100';
@@ -85,7 +94,7 @@ const AnalysisResults: React.FC<AnalysisResultsProps> = ({ documents, recommenda
                   <span className="font-medium text-gray-700">Credit Limit</span>
                 </div>
                 <div className="text-lg font-bold text-gray-900">
-                  ${recommendation.creditLimit.toLocaleString()}
+                  {formatCurrency(recommendation.creditLimit)}
                 </div>
               </div>
             )}
@@ -174,13 +183,13 @@ const AnalysisResults: React.FC<AnalysisResultsProps> = ({ documents, recommenda
               <div className="grid md:grid-cols-4 gap-4">
                 <div className="bg-green-50 rounded-lg p-3 text-center">
                   <div className="text-lg font-bold text-green-600">
-                    ${recommendation.financialMetrics.totalRevenue.toLocaleString()}
+                    {formatCurrency(recommendation.financialMetrics.totalRevenue)}
                   </div>
                   <div className="text-sm text-gray-600">Total Revenue</div>
                 </div>
                 <div className="bg-blue-50 rounded-lg p-3 text-center">
                   <div className="text-lg font-bold text-blue-600">
-                    ${recommendation.financialMetrics.totalAssets.toLocaleString()}
+                    {formatCurrency(recommendation.financialMetrics.totalAssets)}
                   </div>
                   <div className="text-sm text-gray-600">Total Assets</div>
                 </div>
@@ -388,7 +397,7 @@ const AnalysisResults: React.FC<AnalysisResultsProps> = ({ documents, recommenda
                                   {key.replace(/([A-Z])/g, ' $1').trim()}
                                 </div>
                                 <div className="text-lg font-bold text-green-600">
-                                  {typeof value === 'number' ? `$${value.toLocaleString()}` : value}
+                                  {typeof value === 'number' ? formatCurrency(value) : value}
                                 </div>
                               </div>
                             )
@@ -409,7 +418,7 @@ const AnalysisResults: React.FC<AnalysisResultsProps> = ({ documents, recommenda
                                   {key.replace(/([A-Z])/g, ' $1').trim()}
                                 </div>
                                 <div className="text-lg font-bold text-blue-600">
-                                  {typeof value === 'number' ? `$${value.toLocaleString()}` : value}
+                                  {typeof value === 'number' ? formatCurrency(value) : value}
                                 </div>
                               </div>
                             )
@@ -427,7 +436,7 @@ const AnalysisResults: React.FC<AnalysisResultsProps> = ({ documents, recommenda
                             <div className="flex justify-between items-center mb-2">
                               <span className="font-medium">Account: {statement.accountNumber}</span>
                               <span className="text-lg font-bold text-green-600">
-                                ${statement.balance.toLocaleString()}
+                                {formatCurrency(statement.balance)}
                               </span>
                             </div>
                             <p className="text-sm text-gray-600">Type: {statement.accountType}</p>
