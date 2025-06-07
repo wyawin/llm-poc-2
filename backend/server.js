@@ -13,7 +13,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
-const PORT = process.env.PORT || 3001;
+const PORT = process.env.PORT || 8000;
 
 // Middleware
 app.use(cors());
@@ -27,7 +27,7 @@ try {
   await fs.mkdir(uploadsDir, { recursive: true });
 }
 
-// Configure multer for file uploads
+// Configure multer for file uploads with enhanced file type support
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
     cb(null, uploadsDir);
@@ -93,12 +93,15 @@ app.get('/health', async (req, res) => {
   }
 });
 
-// Upload multiple documents
-app.post('/upload', upload.array('documents', 50), async (req, res) => {
+// Upload multiple documents with password support
+app.post('/upload', upload.array('documents', 10), async (req, res) => {
   try {
     if (!req.files || req.files.length === 0) {
       return res.status(400).json({ error: 'No files uploaded' });
     }
+
+    // Get password from request body if provided
+    const password = req.body.password || null;
 
     const documentIds = req.files.map(file => {
       const documentId = uuidv4();
@@ -109,7 +112,8 @@ app.post('/upload', upload.array('documents', 50), async (req, res) => {
         mimetype: file.mimetype,
         status: 'pending',
         progress: 0,
-        uploadedAt: new Date().toISOString()
+        uploadedAt: new Date().toISOString(),
+        password: password // Store password for encrypted PDFs
       });
       return documentId;
     });
@@ -124,7 +128,7 @@ app.post('/upload', upload.array('documents', 50), async (req, res) => {
   }
 });
 
-// Process a specific document
+// Process a specific document with encryption support
 app.post('/process/:id', async (req, res) => {
   try {
     const documentId = req.params.id;
@@ -136,6 +140,15 @@ app.post('/process/:id', async (req, res) => {
 
     if (docInfo.status === 'processing') {
       return res.status(409).json({ error: 'Document is already being processed' });
+    }
+
+    // Get password from request body if provided (overrides upload password)
+    const password = req.body.password || docInfo.password || null;
+    
+    // Update password in document info
+    if (password) {
+      docInfo.password = password;
+      documentStatus.set(documentId, docInfo);
     }
 
     // Update status to processing
@@ -253,7 +266,7 @@ app.get('/documents', (req, res) => {
   }
 });
 
-// Async function to process document
+// Async function to process document with encryption support
 async function processDocumentAsync(documentId, docInfo) {
   try {
     console.log(`Starting processing for document: ${docInfo.filename}`);
@@ -262,8 +275,12 @@ async function processDocumentAsync(documentId, docInfo) {
     docInfo.progress = 20;
     documentStatus.set(documentId, docInfo);
 
-    // Convert document to images if needed
-    const images = await documentProcessor.convertToImages(docInfo.filepath, docInfo.mimetype);
+    // Convert document to images with password support
+    const images = await documentProcessor.convertToImages(
+      docInfo.filepath, 
+      docInfo.mimetype, 
+      docInfo.password
+    );
     
     docInfo.progress = 40;
     documentStatus.set(documentId, docInfo);
@@ -304,8 +321,15 @@ async function processDocumentAsync(documentId, docInfo) {
   } catch (error) {
     console.error(`Processing failed for document ${docInfo.filename}:`, error);
     
-    docInfo.status = 'error';
-    docInfo.error = error.message;
+    // Check if it's an encryption-related error
+    if (error.message.includes('encrypted') || error.message.includes('password')) {
+      docInfo.status = 'error';
+      docInfo.error = `PDF is encrypted: ${error.message}. Please provide the correct password.`;
+    } else {
+      docInfo.status = 'error';
+      docInfo.error = error.message;
+    }
+    
     docInfo.progress = 0;
     documentStatus.set(documentId, docInfo);
   }
@@ -330,4 +354,5 @@ app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
   console.log(`Health check: http://localhost:${PORT}/health`);
   console.log('Required Ollama models: qwen2.5vl:7b, deepseek-r1:8b');
+  console.log('Enhanced features: Encrypted PDF support, No request timeouts');
 });

@@ -3,6 +3,7 @@ import fs from 'fs/promises';
 import { fileURLToPath } from 'url';
 import sharp from 'sharp';
 import { fromPath } from 'pdf2pic';
+import * as pdfjsLib from 'pdfjs-dist/legacy/build/pdf.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -11,6 +12,22 @@ export class DocumentProcessor {
   constructor() {
     this.tempDir = path.join(__dirname, '../temp');
     this.ensureTempDir();
+    
+    // Common passwords to try for encrypted PDFs
+    this.commonPasswords = [
+      '', // Empty password
+      '123456',
+      'password',
+      '12345',
+      'admin',
+      'user',
+      '000000',
+      'qwerty',
+      'abc123',
+      '123123',
+      'password123',
+      '1234567890'
+    ];
   }
 
   async ensureTempDir() {
@@ -21,15 +38,23 @@ export class DocumentProcessor {
     }
   }
 
-  async convertToImages(filePath, mimeType) {
+  async convertToImages(filePath, mimeType, password = null) {
     const images = [];
 
     try {
       if (mimeType === 'application/pdf') {
-        // Convert PDF to images using pdf2pic
+        // Convert PDF to images with encryption support
         console.log(`Converting PDF to images: ${filePath}`);
         
-        const convert = fromPath(filePath, {
+        // First, try to determine if PDF is encrypted and get page count
+        const pdfInfo = await this.analyzePdf(filePath, password);
+        
+        if (pdfInfo.isEncrypted && !pdfInfo.password) {
+          throw new Error('PDF is encrypted and requires a password. Please provide the password or try common passwords.');
+        }
+
+        // Use pdf2pic for conversion with password support
+        const convertOptions = {
           density: 200,           // Output DPI (higher = better quality)
           saveFilename: `pdf_${Date.now()}`,
           savePath: this.tempDir,
@@ -37,13 +62,17 @@ export class DocumentProcessor {
           width: 2048,           // Max width
           height: 2048,          // Max height
           quality: 90            // JPEG quality
-        });
+        };
 
-        // Get the number of pages first
-        const pdfInfo = await this.getPdfPageCount(filePath);
-        const pageCount = pdfInfo || 10; // Fallback to 10 if we can't determine
+        // Add password if needed
+        if (pdfInfo.password) {
+          convertOptions.password = pdfInfo.password;
+        }
 
-        console.log(`PDF has ${pageCount} pages, converting...`);
+        const convert = fromPath(filePath, convertOptions);
+        const pageCount = pdfInfo.pageCount || 10; // Fallback to 10 if we can't determine
+
+        console.log(`PDF has ${pageCount} pages, converting with${pdfInfo.password ? ' password' : 'out password'}...`);
 
         // Convert all pages
         for (let pageNum = 1; pageNum <= pageCount; pageNum++) {
@@ -99,32 +128,95 @@ export class DocumentProcessor {
     }
   }
 
-  async getPdfPageCount(filePath) {
+  async analyzePdf(filePath, providedPassword = null) {
     try {
-      // Try to get page count by attempting to convert page 1 and checking metadata
-      const convert = fromPath(filePath, {
-        density: 72,
-        saveFilename: `temp_count_${Date.now()}`,
-        savePath: this.tempDir,
-        format: "jpeg"
-      });
-
-      // Try converting increasingly higher page numbers until we fail
-      let pageCount = 1;
-      for (let i = 1; i <= 100; i++) { // Reasonable upper limit
-        try {
-          await convert(i, { responseType: "image" });
-          pageCount = i;
-        } catch (error) {
-          if (error.message.includes('Invalid page number') || 
-              error.message.includes('page does not exist')) {
-            break;
+      console.log(`Analyzing PDF: ${filePath}`);
+      
+      // Read the PDF file
+      const pdfBuffer = await fs.readFile(filePath);
+      
+      let pdfDocument = null;
+      let password = null;
+      let isEncrypted = false;
+      
+      // Try to load the PDF without password first
+      try {
+        pdfDocument = await pdfjsLib.getDocument({
+          data: pdfBuffer,
+          password: ''
+        }).promise;
+      } catch (error) {
+        if (error.name === 'PasswordException') {
+          isEncrypted = true;
+          console.log('PDF is encrypted, trying passwords...');
+          
+          // Try provided password first
+          if (providedPassword) {
+            try {
+              pdfDocument = await pdfjsLib.getDocument({
+                data: pdfBuffer,
+                password: providedPassword
+              }).promise;
+              password = providedPassword;
+              console.log('PDF unlocked with provided password');
+            } catch (passwordError) {
+              console.log('Provided password failed, trying common passwords...');
+            }
           }
-          // For other errors, continue trying
+          
+          // If provided password failed or not provided, try common passwords
+          if (!pdfDocument) {
+            for (const testPassword of this.commonPasswords) {
+              try {
+                pdfDocument = await pdfjsLib.getDocument({
+                  data: pdfBuffer,
+                  password: testPassword
+                }).promise;
+                password = testPassword;
+                console.log(`PDF unlocked with password: "${testPassword}"`);
+                break;
+              } catch (passwordError) {
+                // Continue trying other passwords
+                continue;
+              }
+            }
+          }
+          
+          if (!pdfDocument) {
+            throw new Error('Could not unlock encrypted PDF with common passwords. Please provide the correct password.');
+          }
+        } else {
+          throw error;
         }
       }
+      
+      const pageCount = pdfDocument.numPages;
+      console.log(`PDF analysis complete: ${pageCount} pages, encrypted: ${isEncrypted}, password found: ${!!password}`);
+      
+      return {
+        pageCount,
+        isEncrypted,
+        password,
+        success: true
+      };
+      
+    } catch (error) {
+      console.error('PDF analysis error:', error);
+      return {
+        pageCount: null,
+        isEncrypted: false,
+        password: null,
+        success: false,
+        error: error.message
+      };
+    }
+  }
 
-      return pageCount;
+  async getPdfPageCount(filePath) {
+    try {
+      // Use the new analyzePdf method
+      const pdfInfo = await this.analyzePdf(filePath);
+      return pdfInfo.pageCount;
     } catch (error) {
       console.warn('Could not determine PDF page count:', error.message);
       return null;

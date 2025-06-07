@@ -7,10 +7,9 @@ export class OllamaService {
     this.visionModel = 'qwen2.5vl:7b';
     this.analysisModel = 'deepseek-r1:8b';
     
-    // Create axios instance with default configuration
+    // Create axios instance with default configuration (no timeout)
     this.axiosInstance = axios.create({
       baseURL: this.baseUrl,
-      // timeout: 300000, // 5 minutes timeout for AI processing
       headers: {
         'Content-Type': 'application/json',
       },
