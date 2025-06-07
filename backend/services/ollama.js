@@ -1,8 +1,64 @@
+import axios from 'axios';
+import fs from 'fs/promises';
+
 export class OllamaService {
   constructor() {
     this.baseUrl = process.env.OLLAMA_URL || 'http://localhost:11434';
     this.visionModel = 'qwen2.5vl:7b';
     this.analysisModel = 'deepseek-r1:8b';
+    
+    // Create axios instance with default configuration
+    this.axiosInstance = axios.create({
+      baseURL: this.baseUrl,
+      timeout: 300000, // 5 minutes timeout for AI processing
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    });
+
+    // Add request interceptor for logging
+    this.axiosInstance.interceptors.request.use(
+      (config) => {
+        console.log(`Making request to: ${config.method?.toUpperCase()} ${config.url}`);
+        if (config.data && config.data.model) {
+          console.log(`Using model: ${config.data.model}`);
+        }
+        return config;
+      },
+      (error) => {
+        console.error('Request interceptor error:', error);
+        return Promise.reject(error);
+      }
+    );
+
+    // Add response interceptor for error handling
+    this.axiosInstance.interceptors.response.use(
+      (response) => {
+        console.log(`Response received: ${response.status} ${response.statusText}`);
+        return response;
+      },
+      (error) => {
+        console.error('Response interceptor error:', {
+          status: error.response?.status,
+          statusText: error.response?.statusText,
+          data: error.response?.data,
+          message: error.message
+        });
+        
+        // Transform axios errors to more meaningful messages
+        if (error.code === 'ECONNREFUSED') {
+          error.message = 'Cannot connect to Ollama server. Please ensure Ollama is running.';
+        } else if (error.code === 'ETIMEDOUT') {
+          error.message = 'Request to Ollama server timed out. The model might be processing a large request.';
+        } else if (error.response?.status === 404) {
+          error.message = 'Ollama endpoint not found. Please check if the correct models are installed.';
+        } else if (error.response?.status === 500) {
+          error.message = 'Ollama server error. Please check the server logs.';
+        }
+        
+        return Promise.reject(error);
+      }
+    );
   }
 
   async extractDataFromImage(imagePath) {
@@ -10,7 +66,6 @@ export class OllamaService {
       console.log(`Extracting data from image: ${imagePath}`);
       
       // Read image file and convert to base64
-      const fs = await import('fs/promises');
       const imageBuffer = await fs.readFile(imagePath);
       const base64Image = imageBuffer.toString('base64');
 
@@ -114,34 +169,25 @@ Return ONLY a valid JSON object with this exact structure:
 
 Only return valid JSON. If information is not available, use null for strings/numbers and empty arrays for arrays.`;
 
-      const response = await fetch(`${this.baseUrl}/api/generate`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          model: this.visionModel,
-          prompt: prompt,
-          images: [base64Image],
-          stream: false,
-          options: {
-            temperature: 0.1,
-            top_p: 0.9,
-          }
-        }),
-      });
+      const requestData = {
+        model: this.visionModel,
+        prompt: prompt,
+        images: [base64Image],
+        stream: false,
+        options: {
+          temperature: 0.1,
+          top_p: 0.9,
+        }
+      };
 
-      if (!response.ok) {
-        throw new Error(`Ollama API error: ${response.status} ${response.statusText}`);
-      }
-
-      const result = await response.json();
-      console.log('Raw Ollama vision response length:', result.response?.length);
+      const response = await this.axiosInstance.post('/api/generate', requestData);
+      
+      console.log('Raw Ollama vision response length:', response.data.response?.length);
       
       // Parse the JSON response from Ollama
       let extractedData;
       try {
-        const responseText = result.response.trim();
+        const responseText = response.data.response.trim();
         console.log('Vision response preview:', responseText.substring(0, 300) + '...');
         
         // Try multiple JSON extraction methods
@@ -149,7 +195,7 @@ Only return valid JSON. If information is not available, use null for strings/nu
         
       } catch (parseError) {
         console.error('Failed to parse Ollama vision response:', parseError);
-        console.log('Full raw response:', result.response);
+        console.log('Full raw response:', response.data.response);
         
         // Return a default structure if parsing fails
         extractedData = {
@@ -165,7 +211,7 @@ Only return valid JSON. If information is not available, use null for strings/nu
           },
           extractionDate: new Date().toISOString(),
           confidence: 0.1,
-          rawResponse: result.response,
+          rawResponse: response.data.response,
           parseError: parseError.message
         };
       }
@@ -184,7 +230,15 @@ Only return valid JSON. If information is not available, use null for strings/nu
 
     } catch (error) {
       console.error('Ollama extraction error:', error);
-      throw new Error(`Failed to extract data from image: ${error.message}`);
+      
+      // Handle specific axios errors
+      if (error.response) {
+        throw new Error(`Ollama API error: ${error.response.status} ${error.response.statusText} - ${error.response.data?.error || error.message}`);
+      } else if (error.request) {
+        throw new Error('No response from Ollama server. Please check if Ollama is running and accessible.');
+      } else {
+        throw new Error(`Failed to extract data from image: ${error.message}`);
+      }
     }
   }
 
@@ -283,34 +337,25 @@ Return ONLY a valid JSON object with this exact structure:
 
 Provide detailed, professional analysis based on the available data. If certain information is missing, note the limitations and provide recommendations based on available data.`;
 
-      const response = await fetch(`${this.baseUrl}/api/generate`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          model: this.analysisModel,
-          prompt: prompt,
-          stream: false,
-          options: {
-            temperature: 0.2,
-            top_p: 0.9,
-            num_predict: 4000
-          }
-        }),
-      });
+      const requestData = {
+        model: this.analysisModel,
+        prompt: prompt,
+        stream: false,
+        options: {
+          temperature: 0.2,
+          top_p: 0.9,
+          num_predict: 4000
+        }
+      };
 
-      if (!response.ok) {
-        throw new Error(`Ollama API error: ${response.status} ${response.statusText}`);
-      }
-
-      const result = await response.json();
-      console.log('Raw Ollama analysis response length:', result.response?.length);
+      const response = await this.axiosInstance.post('/api/generate', requestData);
+      
+      console.log('Raw Ollama analysis response length:', response.data.response?.length);
       
       // Parse the JSON response
       let insights;
       try {
-        const responseText = result.response.trim();
+        const responseText = response.data.response.trim();
         console.log('Analysis response preview:', responseText.substring(0, 300) + '...');
         
         // Try multiple JSON extraction methods
@@ -318,7 +363,7 @@ Provide detailed, professional analysis based on the available data. If certain 
         
       } catch (parseError) {
         console.error('Failed to parse insights response:', parseError);
-        console.log('Full raw response:', result.response);
+        console.log('Full raw response:', response.data.response);
         
         // Return a fallback structure
         insights = {
@@ -361,7 +406,7 @@ Provide detailed, professional analysis based on the available data. If certain 
           },
           summary: "Credit analysis could not be completed due to technical issues.",
           analysisDate: new Date().toISOString(),
-          rawResponse: result.response,
+          rawResponse: response.data.response,
           parseError: parseError.message
         };
       }
@@ -375,7 +420,15 @@ Provide detailed, professional analysis based on the available data. If certain 
 
     } catch (error) {
       console.error('Credit insights generation error:', error);
-      throw new Error(`Failed to generate credit insights: ${error.message}`);
+      
+      // Handle specific axios errors
+      if (error.response) {
+        throw new Error(`Ollama API error: ${error.response.status} ${error.response.statusText} - ${error.response.data?.error || error.message}`);
+      } else if (error.request) {
+        throw new Error('No response from Ollama server. Please check if Ollama is running and accessible.');
+      } else {
+        throw new Error(`Failed to generate credit insights: ${error.message}`);
+      }
     }
   }
 
@@ -472,8 +525,8 @@ Provide detailed, professional analysis based on the available data. If certain 
 
   async checkHealth() {
     try {
-      const response = await fetch(`${this.baseUrl}/api/tags`);
-      return response.ok;
+      const response = await this.axiosInstance.get('/api/tags');
+      return true;
     } catch (error) {
       console.error('Ollama health check failed:', error);
       return false;
@@ -482,11 +535,10 @@ Provide detailed, professional analysis based on the available data. If certain 
 
   async ensureModelsExist() {
     try {
-      const response = await fetch(`${this.baseUrl}/api/tags`);
-      const data = await response.json();
+      const response = await this.axiosInstance.get('/api/tags');
       
-      const visionModelExists = data.models?.some(model => model.name.includes(this.visionModel));
-      const analysisModelExists = data.models?.some(model => model.name.includes(this.analysisModel));
+      const visionModelExists = response.data.models?.some(model => model.name.includes(this.visionModel));
+      const analysisModelExists = response.data.models?.some(model => model.name.includes(this.analysisModel));
       
       const missingModels = [];
       if (!visionModelExists) missingModels.push(this.visionModel);
