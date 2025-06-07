@@ -155,6 +155,8 @@ export const useDocumentProcessing = () => {
       // Step 3: Wait for all documents to complete, then generate recommendation
       const checkCompletion = setInterval(async () => {
         console.log('checking document completion...');
+        console.log('documents', documents);
+        console.log('pending docs', pendingDocs);
         const currentDocs = documents.filter(doc => 
           pendingDocs.some(pendingDoc => pendingDoc.id === doc.id)
         );
