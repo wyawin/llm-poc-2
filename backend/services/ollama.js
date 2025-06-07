@@ -37,7 +37,7 @@ Please extract the following information if available:
 
 IMPORTANT: For financial statements with multiple periods, extract ALL periods found in the document.
 
-Return the data in this exact JSON structure:
+Return ONLY a valid JSON object with this exact structure:
 {
   "documentType": "string (specific document type)",
   "companyInfo": {
@@ -136,34 +136,19 @@ Only return valid JSON. If information is not available, use null for strings/nu
       }
 
       const result = await response.json();
-      console.log('Raw Ollama vision response:', result.response?.substring(0, 200) + '...');
+      console.log('Raw Ollama vision response length:', result.response?.length);
       
       // Parse the JSON response from Ollama
       let extractedData;
       try {
-        // Clean the response text to extract JSON
         const responseText = result.response.trim();
+        console.log('Vision response preview:', responseText.substring(0, 300) + '...');
         
-        // Try to find JSON in the response
-        let jsonMatch = responseText.match(/\{[\s\S]*\}/);
+        // Try multiple JSON extraction methods
+        extractedData = this.parseJsonFromResponse(responseText);
         
-        if (!jsonMatch) {
-          // If no JSON found, try to extract from code blocks
-          const codeBlockMatch = responseText.match(/```(?:json)?\s*(\{[\s\S]*?\})\s*```/);
-          if (codeBlockMatch) {
-            jsonMatch = [codeBlockMatch[1]];
-          }
-        }
-        
-        if (jsonMatch) {
-          const jsonString = jsonMatch[0];
-          console.log('Extracted JSON string:', jsonString.substring(0, 200) + '...');
-          extractedData = JSON.parse(jsonString);
-        } else {
-          throw new Error('No valid JSON found in response');
-        }
       } catch (parseError) {
-        console.error('Failed to parse Ollama response:', parseError);
+        console.error('Failed to parse Ollama vision response:', parseError);
         console.log('Full raw response:', result.response);
         
         // Return a default structure if parsing fails
@@ -185,12 +170,11 @@ Only return valid JSON. If information is not available, use null for strings/nu
         };
       }
 
-      // Ensure extractionDate is set
+      // Ensure required fields are set
       if (!extractedData.extractionDate) {
         extractedData.extractionDate = new Date().toISOString();
       }
 
-      // Ensure confidence is set
       if (typeof extractedData.confidence !== 'number') {
         extractedData.confidence = 0.5;
       }
@@ -254,7 +238,7 @@ Pay special attention to:
 - Quality and completeness of financial information
 - Business stability indicators
 
-Return your analysis in this JSON structure:
+Return ONLY a valid JSON object with this exact structure:
 {
   "businessOverview": {
     "companyProfile": "string",
@@ -282,19 +266,19 @@ Return your analysis in this JSON structure:
     "mitigationStrategies": ["string"]
   },
   "recommendation": {
-    "decision": "approve|conditional|decline",
+    "decision": "approve",
     "reasoning": "string",
     "conditions": ["string"]
   },
   "scoring": {
-    "creditScore": number,
-    "riskRating": "Low|Medium|High",
-    "creditLimit": number,
-    "interestRate": number,
-    "confidenceLevel": number
+    "creditScore": 650,
+    "riskRating": "Medium",
+    "creditLimit": 100000000,
+    "interestRate": 12.5,
+    "confidenceLevel": 0.8
   },
   "summary": "string",
-  "analysisDate": "ISO date string"
+  "analysisDate": "2024-01-01T00:00:00.000Z"
 }
 
 Provide detailed, professional analysis based on the available data. If certain information is missing, note the limitations and provide recommendations based on available data.`;
@@ -321,31 +305,17 @@ Provide detailed, professional analysis based on the available data. If certain 
       }
 
       const result = await response.json();
-      console.log('Raw Ollama analysis response:', result.response?.substring(0, 200) + '...');
+      console.log('Raw Ollama analysis response length:', result.response?.length);
       
       // Parse the JSON response
       let insights;
       try {
         const responseText = result.response.trim();
+        console.log('Analysis response preview:', responseText.substring(0, 300) + '...');
         
-        // Try to find JSON in the response
-        let jsonMatch = responseText.match(/\{[\s\S]*\}/);
+        // Try multiple JSON extraction methods
+        insights = this.parseJsonFromResponse(responseText);
         
-        if (!jsonMatch) {
-          // If no JSON found, try to extract from code blocks
-          const codeBlockMatch = responseText.match(/```(?:json)?\s*(\{[\s\S]*?\})\s*```/);
-          if (codeBlockMatch) {
-            jsonMatch = [codeBlockMatch[1]];
-          }
-        }
-        
-        if (jsonMatch) {
-          const jsonString = jsonMatch[0];
-          console.log('Extracted insights JSON string:', jsonString.substring(0, 200) + '...');
-          insights = JSON.parse(jsonString);
-        } else {
-          throw new Error('No valid JSON found in response');
-        }
       } catch (parseError) {
         console.error('Failed to parse insights response:', parseError);
         console.log('Full raw response:', result.response);
@@ -407,6 +377,97 @@ Provide detailed, professional analysis based on the available data. If certain 
       console.error('Credit insights generation error:', error);
       throw new Error(`Failed to generate credit insights: ${error.message}`);
     }
+  }
+
+  parseJsonFromResponse(responseText) {
+    // Method 1: Try to find JSON object directly
+    let jsonMatch = responseText.match(/\{[\s\S]*\}/);
+    
+    if (jsonMatch) {
+      try {
+        const jsonString = jsonMatch[0];
+        console.log('Attempting to parse JSON (method 1):', jsonString.substring(0, 200) + '...');
+        return JSON.parse(jsonString);
+      } catch (error) {
+        console.log('Method 1 failed:', error.message);
+      }
+    }
+
+    // Method 2: Try to extract from code blocks
+    const codeBlockMatch = responseText.match(/```(?:json)?\s*(\{[\s\S]*?\})\s*```/);
+    if (codeBlockMatch) {
+      try {
+        const jsonString = codeBlockMatch[1];
+        console.log('Attempting to parse JSON (method 2):', jsonString.substring(0, 200) + '...');
+        return JSON.parse(jsonString);
+      } catch (error) {
+        console.log('Method 2 failed:', error.message);
+      }
+    }
+
+    // Method 3: Try to find the largest JSON-like structure
+    const jsonMatches = responseText.match(/\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}/g);
+    if (jsonMatches && jsonMatches.length > 0) {
+      // Sort by length and try the longest one first
+      const sortedMatches = jsonMatches.sort((a, b) => b.length - a.length);
+      
+      for (const match of sortedMatches) {
+        try {
+          console.log('Attempting to parse JSON (method 3):', match.substring(0, 200) + '...');
+          return JSON.parse(match);
+        } catch (error) {
+          console.log('Method 3 attempt failed:', error.message);
+          continue;
+        }
+      }
+    }
+
+    // Method 4: Try to clean and parse the entire response
+    try {
+      // Remove any text before the first { and after the last }
+      const firstBrace = responseText.indexOf('{');
+      const lastBrace = responseText.lastIndexOf('}');
+      
+      if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+        const cleanedJson = responseText.substring(firstBrace, lastBrace + 1);
+        console.log('Attempting to parse JSON (method 4):', cleanedJson.substring(0, 200) + '...');
+        return JSON.parse(cleanedJson);
+      }
+    } catch (error) {
+      console.log('Method 4 failed:', error.message);
+    }
+
+    // Method 5: Try to fix common JSON issues
+    try {
+      let fixedJson = responseText;
+      
+      // Remove any text before first {
+      const firstBrace = fixedJson.indexOf('{');
+      if (firstBrace > 0) {
+        fixedJson = fixedJson.substring(firstBrace);
+      }
+      
+      // Remove any text after last }
+      const lastBrace = fixedJson.lastIndexOf('}');
+      if (lastBrace !== -1) {
+        fixedJson = fixedJson.substring(0, lastBrace + 1);
+      }
+      
+      // Fix common issues
+      fixedJson = fixedJson
+        .replace(/,\s*}/g, '}')  // Remove trailing commas
+        .replace(/,\s*]/g, ']')  // Remove trailing commas in arrays
+        .replace(/\n/g, ' ')     // Replace newlines with spaces
+        .replace(/\s+/g, ' ')    // Normalize whitespace
+        .trim();
+      
+      console.log('Attempting to parse JSON (method 5):', fixedJson.substring(0, 200) + '...');
+      return JSON.parse(fixedJson);
+    } catch (error) {
+      console.log('Method 5 failed:', error.message);
+    }
+
+    throw new Error('No valid JSON found in response after trying all parsing methods');
   }
 
   async checkHealth() {

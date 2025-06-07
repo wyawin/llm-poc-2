@@ -15,33 +15,42 @@ export class CreditAnalyzer {
     try {
       console.log('Generating comprehensive credit recommendation with grouped financial data');
 
-      // Use Ollama insights as primary recommendation
+      // Validate inputs
+      if (!ollamaInsights) {
+        throw new Error('Ollama insights are required for recommendation generation');
+      }
+
+      if (!allExtractedData || allExtractedData.length === 0) {
+        throw new Error('No extracted data available for recommendation');
+      }
+
+      // Use Ollama insights as primary recommendation with fallbacks
       const recommendation = {
-        // Core recommendation from Ollama
-        score: ollamaInsights.scoring?.creditScore || this.calculateFallbackScore(allExtractedData),
-        recommendation: ollamaInsights.recommendation?.decision || 'decline',
-        riskLevel: ollamaInsights.scoring?.riskRating?.toLowerCase() || 'high',
-        creditLimit: ollamaInsights.scoring?.creditLimit || 0,
-        interestRate: ollamaInsights.scoring?.interestRate || null,
+        // Core recommendation from Ollama with fallbacks
+        score: this.getValidScore(ollamaInsights.scoring?.creditScore) || this.calculateFallbackScore(allExtractedData),
+        recommendation: this.getValidRecommendation(ollamaInsights.recommendation?.decision) || 'decline',
+        riskLevel: this.getValidRiskLevel(ollamaInsights.scoring?.riskRating) || 'high',
+        creditLimit: this.getValidNumber(ollamaInsights.scoring?.creditLimit) || 0,
+        interestRate: this.getValidNumber(ollamaInsights.scoring?.interestRate) || null,
         
-        // Enhanced analysis
-        businessOverview: ollamaInsights.businessOverview,
-        financialAnalysis: ollamaInsights.financialAnalysis,
-        creditRiskAssessment: ollamaInsights.creditRiskAssessment,
+        // Enhanced analysis with fallbacks
+        businessOverview: this.getValidBusinessOverview(ollamaInsights.businessOverview),
+        financialAnalysis: this.getValidFinancialAnalysis(ollamaInsights.financialAnalysis),
+        creditRiskAssessment: this.getValidCreditRiskAssessment(ollamaInsights.creditRiskAssessment),
         
-        // Insights and recommendations
-        keyStrengths: ollamaInsights.insights?.keyStrengths || [],
-        keyWeaknesses: ollamaInsights.insights?.keyWeaknesses || [],
-        riskFactors: ollamaInsights.insights?.riskFactors || [],
-        mitigationStrategies: ollamaInsights.insights?.mitigationStrategies || [],
+        // Insights and recommendations with fallbacks
+        keyStrengths: this.getValidArray(ollamaInsights.insights?.keyStrengths) || ['Financial documents provided'],
+        keyWeaknesses: this.getValidArray(ollamaInsights.insights?.keyWeaknesses) || ['Limited analysis available'],
+        riskFactors: this.getValidArray(ollamaInsights.insights?.riskFactors) || ['Insufficient data for comprehensive assessment'],
+        mitigationStrategies: this.getValidArray(ollamaInsights.insights?.mitigationStrategies) || ['Provide additional financial documentation'],
         
         // Detailed reasoning
         reasons: this.extractReasons(ollamaInsights),
-        conditions: ollamaInsights.recommendation?.conditions || [],
+        conditions: this.getValidArray(ollamaInsights.recommendation?.conditions) || [],
         
         // Summary and metadata
-        executiveSummary: ollamaInsights.summary,
-        confidenceLevel: ollamaInsights.scoring?.confidenceLevel || 0.5,
+        executiveSummary: this.getValidString(ollamaInsights.summary) || 'Credit analysis completed based on available financial documents',
+        confidenceLevel: this.getValidNumber(ollamaInsights.scoring?.confidenceLevel) || 0.5,
         analysisDate: new Date().toISOString(),
         documentsAnalyzed: allExtractedData.length,
         
@@ -52,14 +61,22 @@ export class CreditAnalyzer {
         financialMetrics: this.calculateFinancialMetrics(allExtractedData),
         
         // NEW: Grouped financial data for table display
-        groupedFinancialData: groupedFinancialData,
+        groupedFinancialData: groupedFinancialData || null,
         
         // NEW: Financial trends analysis
-        financialTrends: this.analyzeFinancialTrends(groupedFinancialData),
+        financialTrends: groupedFinancialData ? this.analyzeFinancialTrends(groupedFinancialData) : null,
         
         // NEW: Multi-period analysis
-        multiPeriodAnalysis: this.generateMultiPeriodAnalysis(groupedFinancialData)
+        multiPeriodAnalysis: groupedFinancialData ? this.generateMultiPeriodAnalysis(groupedFinancialData) : null
       };
+
+      console.log('Credit recommendation generated successfully:', {
+        score: recommendation.score,
+        recommendation: recommendation.recommendation,
+        riskLevel: recommendation.riskLevel,
+        hasGroupedData: !!recommendation.groupedFinancialData,
+        hasTrends: !!recommendation.financialTrends
+      });
 
       return recommendation;
 
@@ -69,61 +86,157 @@ export class CreditAnalyzer {
     }
   }
 
+  // Validation helper methods
+  getValidScore(score) {
+    const numScore = Number(score);
+    return (numScore >= 300 && numScore <= 850) ? numScore : null;
+  }
+
+  getValidRecommendation(decision) {
+    const validDecisions = ['approve', 'conditional', 'decline'];
+    return validDecisions.includes(decision) ? decision : null;
+  }
+
+  getValidRiskLevel(riskRating) {
+    const validRisks = ['low', 'medium', 'high'];
+    const normalized = riskRating?.toLowerCase();
+    return validRisks.includes(normalized) ? normalized : null;
+  }
+
+  getValidNumber(value) {
+    const num = Number(value);
+    return !isNaN(num) && isFinite(num) ? num : null;
+  }
+
+  getValidString(value) {
+    return (typeof value === 'string' && value.trim().length > 0) ? value.trim() : null;
+  }
+
+  getValidArray(value) {
+    return Array.isArray(value) && value.length > 0 ? value : null;
+  }
+
+  getValidBusinessOverview(overview) {
+    if (!overview || typeof overview !== 'object') {
+      return {
+        companyProfile: 'Company profile analysis not available',
+        industryAnalysis: 'Industry analysis not available',
+        managementAssessment: 'Management assessment not available',
+        businessModelEvaluation: 'Business model evaluation not available'
+      };
+    }
+
+    return {
+      companyProfile: this.getValidString(overview.companyProfile) || 'Company profile analysis not available',
+      industryAnalysis: this.getValidString(overview.industryAnalysis) || 'Industry analysis not available',
+      managementAssessment: this.getValidString(overview.managementAssessment) || 'Management assessment not available',
+      businessModelEvaluation: this.getValidString(overview.businessModelEvaluation) || 'Business model evaluation not available'
+    };
+  }
+
+  getValidFinancialAnalysis(analysis) {
+    if (!analysis || typeof analysis !== 'object') {
+      return {
+        revenueAnalysis: 'Revenue analysis not available',
+        profitabilityAssessment: 'Profitability assessment not available',
+        balanceSheetStrength: 'Balance sheet analysis not available',
+        cashFlowAnalysis: 'Cash flow analysis not available',
+        debtCapacity: 'Debt capacity evaluation not available'
+      };
+    }
+
+    return {
+      revenueAnalysis: this.getValidString(analysis.revenueAnalysis) || 'Revenue analysis not available',
+      profitabilityAssessment: this.getValidString(analysis.profitabilityAssessment) || 'Profitability assessment not available',
+      balanceSheetStrength: this.getValidString(analysis.balanceSheetStrength) || 'Balance sheet analysis not available',
+      cashFlowAnalysis: this.getValidString(analysis.cashFlowAnalysis) || 'Cash flow analysis not available',
+      debtCapacity: this.getValidString(analysis.debtCapacity) || 'Debt capacity evaluation not available'
+    };
+  }
+
+  getValidCreditRiskAssessment(assessment) {
+    if (!assessment || typeof assessment !== 'object') {
+      return {
+        paymentHistoryEvaluation: 'Payment history evaluation not available',
+        debtRatios: 'Debt ratio analysis not available',
+        liquidityPosition: 'Liquidity assessment not available',
+        overallCreditworthiness: 'Overall creditworthiness assessment not available'
+      };
+    }
+
+    return {
+      paymentHistoryEvaluation: this.getValidString(assessment.paymentHistoryEvaluation) || 'Payment history evaluation not available',
+      debtRatios: this.getValidString(assessment.debtRatios) || 'Debt ratio analysis not available',
+      liquidityPosition: this.getValidString(assessment.liquidityPosition) || 'Liquidity assessment not available',
+      overallCreditworthiness: this.getValidString(assessment.overallCreditworthiness) || 'Overall creditworthiness assessment not available'
+    };
+  }
+
   analyzeFinancialTrends(groupedData) {
     const trends = {
-      revenue: { trend: 'stable', changePercent: 0, periods: [] },
-      profitability: { trend: 'stable', changePercent: 0, periods: [] },
-      assets: { trend: 'stable', changePercent: 0, periods: [] },
-      liquidity: { trend: 'stable', changePercent: 0, periods: [] }
+      revenue: { trend: 'stable', changePercent: 0, periods: [], label: 'Revenue' },
+      profitability: { trend: 'stable', changePercent: 0, periods: [], label: 'Profitability' },
+      assets: { trend: 'stable', changePercent: 0, periods: [], label: 'Assets' },
+      liquidity: { trend: 'stable', changePercent: 0, periods: [], label: 'Liquidity' }
     };
 
-    // Analyze P&L trends
-    if (groupedData.profitLossStatements.length >= 2) {
-      const sortedPL = [...groupedData.profitLossStatements].sort((a, b) => 
-        this.comparePeriods(a.period, b.period)
-      );
+    try {
+      // Analyze P&L trends
+      if (groupedData.profitLossStatements && groupedData.profitLossStatements.length >= 2) {
+        const sortedPL = [...groupedData.profitLossStatements].sort((a, b) => 
+          this.comparePeriods(a.period, b.period)
+        );
 
-      // Revenue trend
-      const revenueData = sortedPL.map(pl => ({ period: pl.period, value: pl.revenue }));
-      trends.revenue = this.calculateTrend(revenueData, 'Revenue');
+        // Revenue trend
+        const revenueData = sortedPL.map(pl => ({ period: pl.period, value: pl.revenue || 0 }));
+        trends.revenue = this.calculateTrend(revenueData, 'Revenue');
 
-      // Profitability trend
-      const profitData = sortedPL.map(pl => ({ period: pl.period, value: pl.netIncome }));
-      trends.profitability = this.calculateTrend(profitData, 'Net Income');
-    }
+        // Profitability trend
+        const profitData = sortedPL.map(pl => ({ period: pl.period, value: pl.netIncome || 0 }));
+        trends.profitability = this.calculateTrend(profitData, 'Profitability');
+      }
 
-    // Analyze Balance Sheet trends
-    if (groupedData.balanceSheets.length >= 2) {
-      const sortedBS = [...groupedData.balanceSheets].sort((a, b) => 
-        this.comparePeriods(a.asOfDate, b.asOfDate)
-      );
+      // Analyze Balance Sheet trends
+      if (groupedData.balanceSheets && groupedData.balanceSheets.length >= 2) {
+        const sortedBS = [...groupedData.balanceSheets].sort((a, b) => 
+          this.comparePeriods(a.asOfDate, b.asOfDate)
+        );
 
-      // Assets trend
-      const assetsData = sortedBS.map(bs => ({ period: bs.asOfDate, value: bs.totalAssets }));
-      trends.assets = this.calculateTrend(assetsData, 'Total Assets');
-    }
+        // Assets trend
+        const assetsData = sortedBS.map(bs => ({ period: bs.asOfDate, value: bs.totalAssets || 0 }));
+        trends.assets = this.calculateTrend(assetsData, 'Assets');
+      }
 
-    // Analyze Bank Statement trends
-    if (groupedData.bankStatements.length >= 2) {
-      const sortedBank = [...groupedData.bankStatements].sort((a, b) => 
-        this.comparePeriods(a.period, b.period)
-      );
+      // Analyze Bank Statement trends
+      if (groupedData.bankStatements && groupedData.bankStatements.length >= 2) {
+        const sortedBank = [...groupedData.bankStatements].sort((a, b) => 
+          this.comparePeriods(a.period, b.period)
+        );
 
-      // Liquidity trend (average balance)
-      const liquidityData = sortedBank.map(bs => ({ period: bs.period, value: bs.balance }));
-      trends.liquidity = this.calculateTrend(liquidityData, 'Bank Balance');
+        // Liquidity trend (average balance)
+        const liquidityData = sortedBank.map(bs => ({ period: bs.period, value: bs.balance || 0 }));
+        trends.liquidity = this.calculateTrend(liquidityData, 'Liquidity');
+      }
+    } catch (error) {
+      console.error('Error analyzing financial trends:', error);
     }
 
     return trends;
   }
 
   calculateTrend(data, label) {
-    if (data.length < 2) {
+    if (!data || data.length < 2) {
       return { trend: 'insufficient_data', changePercent: 0, periods: [], label };
     }
 
-    const firstValue = data[0].value || 0;
-    const lastValue = data[data.length - 1].value || 0;
+    const validData = data.filter(d => d.value !== null && d.value !== undefined && !isNaN(d.value));
+    
+    if (validData.length < 2) {
+      return { trend: 'insufficient_data', changePercent: 0, periods: [], label };
+    }
+
+    const firstValue = validData[0].value || 0;
+    const lastValue = validData[validData.length - 1].value || 0;
     
     let changePercent = 0;
     let trend = 'stable';
@@ -146,7 +259,7 @@ export class CreditAnalyzer {
     return {
       trend,
       changePercent: Math.round(changePercent * 100) / 100,
-      periods: data.map(d => d.period),
+      periods: validData.map(d => d.period),
       firstValue,
       lastValue,
       label
@@ -155,61 +268,95 @@ export class CreditAnalyzer {
 
   generateMultiPeriodAnalysis(groupedData) {
     const analysis = {
-      periodsAnalyzed: new Set(),
+      periodsAnalyzed: [],
       consistencyScore: 0,
-      dataQuality: 'good',
+      dataQuality: 'limited',
       keyInsights: [],
       recommendations: []
     };
 
-    // Collect all periods
-    groupedData.profitLossStatements.forEach(pl => analysis.periodsAnalyzed.add(pl.period));
-    groupedData.balanceSheets.forEach(bs => analysis.periodsAnalyzed.add(bs.asOfDate));
-    groupedData.bankStatements.forEach(bank => analysis.periodsAnalyzed.add(bank.period));
-    groupedData.cashFlowStatements.forEach(cf => analysis.periodsAnalyzed.add(cf.period));
+    try {
+      const periodsSet = new Set();
 
-    analysis.periodsAnalyzed = Array.from(analysis.periodsAnalyzed).filter(p => p !== 'Unknown Period' && p !== 'Unknown Date');
+      // Collect all periods
+      if (groupedData.profitLossStatements) {
+        groupedData.profitLossStatements.forEach(pl => {
+          if (pl.period && pl.period !== 'Unknown Period') {
+            periodsSet.add(pl.period);
+          }
+        });
+      }
 
-    // Calculate consistency score
-    const totalStatements = groupedData.profitLossStatements.length + 
-                           groupedData.balanceSheets.length + 
-                           groupedData.cashFlowStatements.length;
-    
-    if (totalStatements >= 6) {
-      analysis.consistencyScore = 0.9;
-      analysis.dataQuality = 'excellent';
-    } else if (totalStatements >= 3) {
-      analysis.consistencyScore = 0.7;
-      analysis.dataQuality = 'good';
-    } else {
-      analysis.consistencyScore = 0.4;
-      analysis.dataQuality = 'limited';
-    }
+      if (groupedData.balanceSheets) {
+        groupedData.balanceSheets.forEach(bs => {
+          if (bs.asOfDate && bs.asOfDate !== 'Unknown Date') {
+            periodsSet.add(bs.asOfDate);
+          }
+        });
+      }
 
-    // Generate insights
-    if (groupedData.profitLossStatements.length >= 2) {
-      analysis.keyInsights.push('Multiple profit & loss statements available for trend analysis');
-    }
-    
-    if (groupedData.balanceSheets.length >= 2) {
-      analysis.keyInsights.push('Multiple balance sheets enable asset and liability trend evaluation');
-    }
+      if (groupedData.bankStatements) {
+        groupedData.bankStatements.forEach(bank => {
+          if (bank.period && bank.period !== 'Unknown Period') {
+            periodsSet.add(bank.period);
+          }
+        });
+      }
 
-    if (groupedData.bankStatements.length >= 3) {
-      analysis.keyInsights.push('Comprehensive banking history provides strong cash flow insights');
-    }
+      if (groupedData.cashFlowStatements) {
+        groupedData.cashFlowStatements.forEach(cf => {
+          if (cf.period && cf.period !== 'Unknown Period') {
+            periodsSet.add(cf.period);
+          }
+        });
+      }
 
-    // Generate recommendations
-    if (analysis.periodsAnalyzed.length < 2) {
-      analysis.recommendations.push('Request additional historical financial statements for better trend analysis');
-    }
+      analysis.periodsAnalyzed = Array.from(periodsSet);
 
-    if (groupedData.cashFlowStatements.length === 0) {
-      analysis.recommendations.push('Cash flow statements would enhance liquidity assessment');
-    }
+      // Calculate consistency score
+      const totalStatements = (groupedData.profitLossStatements?.length || 0) + 
+                             (groupedData.balanceSheets?.length || 0) + 
+                             (groupedData.cashFlowStatements?.length || 0);
+      
+      if (totalStatements >= 6) {
+        analysis.consistencyScore = 0.9;
+        analysis.dataQuality = 'excellent';
+      } else if (totalStatements >= 3) {
+        analysis.consistencyScore = 0.7;
+        analysis.dataQuality = 'good';
+      } else {
+        analysis.consistencyScore = 0.4;
+        analysis.dataQuality = 'limited';
+      }
 
-    if (groupedData.creditReports.length === 0) {
-      analysis.recommendations.push('Credit history report would improve risk assessment accuracy');
+      // Generate insights
+      if (groupedData.profitLossStatements && groupedData.profitLossStatements.length >= 2) {
+        analysis.keyInsights.push('Multiple profit & loss statements available for trend analysis');
+      }
+      
+      if (groupedData.balanceSheets && groupedData.balanceSheets.length >= 2) {
+        analysis.keyInsights.push('Multiple balance sheets enable asset and liability trend evaluation');
+      }
+
+      if (groupedData.bankStatements && groupedData.bankStatements.length >= 3) {
+        analysis.keyInsights.push('Comprehensive banking history provides strong cash flow insights');
+      }
+
+      // Generate recommendations
+      if (analysis.periodsAnalyzed.length < 2) {
+        analysis.recommendations.push('Request additional historical financial statements for better trend analysis');
+      }
+
+      if (!groupedData.cashFlowStatements || groupedData.cashFlowStatements.length === 0) {
+        analysis.recommendations.push('Cash flow statements would enhance liquidity assessment');
+      }
+
+      if (!groupedData.creditReports || groupedData.creditReports.length === 0) {
+        analysis.recommendations.push('Credit history report would improve risk assessment accuracy');
+      }
+    } catch (error) {
+      console.error('Error generating multi-period analysis:', error);
+      analysis.keyInsights.push('Error occurred during multi-period analysis');
     }
 
     return analysis;
@@ -238,21 +385,40 @@ export class CreditAnalyzer {
   extractReasons(insights) {
     const reasons = [];
     
-    // Extract reasons from different sections
-    if (insights.recommendation?.reasoning) {
-      reasons.push(insights.recommendation.reasoning);
-    }
-    
-    if (insights.businessOverview?.companyProfile) {
-      reasons.push(`Business Profile: ${insights.businessOverview.companyProfile.substring(0, 100)}...`);
-    }
-    
-    if (insights.financialAnalysis?.revenueAnalysis) {
-      reasons.push(`Revenue Analysis: ${insights.financialAnalysis.revenueAnalysis.substring(0, 100)}...`);
-    }
-    
-    if (insights.creditRiskAssessment?.overallCreditworthiness) {
-      reasons.push(`Creditworthiness: ${insights.creditRiskAssessment.overallCreditworthiness.substring(0, 100)}...`);
+    try {
+      // Extract reasons from different sections
+      if (insights.recommendation?.reasoning) {
+        reasons.push(insights.recommendation.reasoning);
+      }
+      
+      if (insights.businessOverview?.companyProfile) {
+        const profile = insights.businessOverview.companyProfile;
+        if (profile.length > 100) {
+          reasons.push(`Business Profile: ${profile.substring(0, 100)}...`);
+        } else {
+          reasons.push(`Business Profile: ${profile}`);
+        }
+      }
+      
+      if (insights.financialAnalysis?.revenueAnalysis) {
+        const revenue = insights.financialAnalysis.revenueAnalysis;
+        if (revenue.length > 100) {
+          reasons.push(`Revenue Analysis: ${revenue.substring(0, 100)}...`);
+        } else {
+          reasons.push(`Revenue Analysis: ${revenue}`);
+        }
+      }
+      
+      if (insights.creditRiskAssessment?.overallCreditworthiness) {
+        const creditworthiness = insights.creditRiskAssessment.overallCreditworthiness;
+        if (creditworthiness.length > 100) {
+          reasons.push(`Creditworthiness: ${creditworthiness.substring(0, 100)}...`);
+        } else {
+          reasons.push(`Creditworthiness: ${creditworthiness}`);
+        }
+      }
+    } catch (error) {
+      console.error('Error extracting reasons:', error);
     }
     
     return reasons.length > 0 ? reasons : ['Analysis completed based on available financial documents'];
@@ -262,39 +428,43 @@ export class CreditAnalyzer {
     // Fallback scoring if Ollama doesn't provide a score
     let score = 300; // Base score
     
-    for (const data of allExtractedData) {
-      // Revenue factor
-      if (data.financialInfo?.profitLoss?.revenue) {
-        const revenue = data.financialInfo.profitLoss.revenue;
-        if (revenue > 1000000) score += 100;
-        else if (revenue > 500000) score += 75;
-        else if (revenue > 100000) score += 50;
-        else if (revenue > 50000) score += 25;
+    try {
+      for (const data of allExtractedData) {
+        // Revenue factor
+        if (data.financialInfo?.profitLoss?.revenue) {
+          const revenue = data.financialInfo.profitLoss.revenue;
+          if (revenue > 1000000) score += 100;
+          else if (revenue > 500000) score += 75;
+          else if (revenue > 100000) score += 50;
+          else if (revenue > 50000) score += 25;
+        }
+        
+        // Profitability factor
+        if (data.financialInfo?.profitLoss?.netIncome) {
+          const netIncome = data.financialInfo.profitLoss.netIncome;
+          if (netIncome > 0) score += 75;
+          else score -= 50;
+        }
+        
+        // Assets factor
+        if (data.financialInfo?.balanceSheet?.totalAssets) {
+          const assets = data.financialInfo.balanceSheet.totalAssets;
+          if (assets > 500000) score += 75;
+          else if (assets > 100000) score += 50;
+          else if (assets > 50000) score += 25;
+        }
+        
+        // Credit history factor
+        if (data.financialInfo?.creditInfo?.creditScore) {
+          const creditScore = data.financialInfo.creditInfo.creditScore;
+          if (creditScore > 700) score += 100;
+          else if (creditScore > 600) score += 50;
+          else if (creditScore > 500) score += 25;
+          else score -= 25;
+        }
       }
-      
-      // Profitability factor
-      if (data.financialInfo?.profitLoss?.netIncome) {
-        const netIncome = data.financialInfo.profitLoss.netIncome;
-        if (netIncome > 0) score += 75;
-        else score -= 50;
-      }
-      
-      // Assets factor
-      if (data.financialInfo?.balanceSheet?.totalAssets) {
-        const assets = data.financialInfo.balanceSheet.totalAssets;
-        if (assets > 500000) score += 75;
-        else if (assets > 100000) score += 50;
-        else if (assets > 50000) score += 25;
-      }
-      
-      // Credit history factor
-      if (data.financialInfo?.creditInfo?.creditScore) {
-        const creditScore = data.financialInfo.creditInfo.creditScore;
-        if (creditScore > 700) score += 100;
-        else if (creditScore > 600) score += 50;
-        else if (creditScore > 500) score += 25;
-        else score -= 25;
-      }
+    } catch (error) {
+      console.error('Error calculating fallback score:', error);
     }
     
     return Math.min(850, Math.max(300, score));
@@ -309,33 +479,37 @@ export class CreditAnalyzer {
       timePeriodsAnalyzed: new Set()
     };
     
-    for (const data of allExtractedData) {
-      // Document types
-      if (data.documentType && data.documentType !== 'Unknown') {
-        summary.documentTypes.push(data.documentType);
+    try {
+      for (const data of allExtractedData) {
+        // Document types
+        if (data.documentType && data.documentType !== 'Unknown') {
+          summary.documentTypes.push(data.documentType);
+        }
+        
+        // Companies
+        if (data.companyInfo?.name) {
+          summary.companiesAnalyzed.add(data.companyInfo.name);
+        }
+        
+        // Individuals
+        if (data.personalInfo?.individuals) {
+          data.personalInfo.individuals.forEach(individual => {
+            if (individual.name) {
+              summary.individualsIdentified.add(individual.name);
+            }
+          });
+        }
+        
+        // Time periods
+        if (data.financialInfo?.profitLoss?.period) {
+          summary.timePeriodsAnalyzed.add(data.financialInfo.profitLoss.period);
+        }
+        if (data.financialInfo?.balanceSheet?.asOfDate) {
+          summary.timePeriodsAnalyzed.add(data.financialInfo.balanceSheet.asOfDate);
+        }
       }
-      
-      // Companies
-      if (data.companyInfo?.name) {
-        summary.companiesAnalyzed.add(data.companyInfo.name);
-      }
-      
-      // Individuals
-      if (data.personalInfo?.individuals) {
-        data.personalInfo.individuals.forEach(individual => {
-          if (individual.name) {
-            summary.individualsIdentified.add(individual.name);
-          }
-        });
-      }
-      
-      // Time periods
-      if (data.financialInfo?.profitLoss?.period) {
-        summary.timePeriodsAnalyzed.add(data.financialInfo.profitLoss.period);
-      }
-      if (data.financialInfo?.balanceSheet?.asOfDate) {
-        summary.timePeriodsAnalyzed.add(data.financialInfo.balanceSheet.asOfDate);
-      }
+    } catch (error) {
+      console.error('Error generating document summary:', error);
     }
     
     return {
@@ -359,37 +533,41 @@ export class CreditAnalyzer {
       returnOnAssets: 0
     };
     
-    for (const data of allExtractedData) {
-      // Revenue and income
-      if (data.financialInfo?.profitLoss?.revenue) {
-        metrics.totalRevenue += data.financialInfo.profitLoss.revenue;
-      }
-      if (data.financialInfo?.profitLoss?.netIncome) {
-        metrics.netIncome += data.financialInfo.profitLoss.netIncome;
+    try {
+      for (const data of allExtractedData) {
+        // Revenue and income
+        if (data.financialInfo?.profitLoss?.revenue) {
+          metrics.totalRevenue += data.financialInfo.profitLoss.revenue;
+        }
+        if (data.financialInfo?.profitLoss?.netIncome) {
+          metrics.netIncome += data.financialInfo.profitLoss.netIncome;
+        }
+        
+        // Balance sheet items
+        if (data.financialInfo?.balanceSheet?.totalAssets) {
+          metrics.totalAssets += data.financialInfo.balanceSheet.totalAssets;
+        }
+        if (data.financialInfo?.balanceSheet?.totalLiabilities) {
+          metrics.totalLiabilities += data.financialInfo.balanceSheet.totalLiabilities;
+        }
+        
+        // Cash flow
+        if (data.financialInfo?.cashFlow?.operatingCashFlow) {
+          metrics.operatingCashFlow += data.financialInfo.cashFlow.operatingCashFlow;
+        }
       }
       
-      // Balance sheet items
-      if (data.financialInfo?.balanceSheet?.totalAssets) {
-        metrics.totalAssets += data.financialInfo.balanceSheet.totalAssets;
-      }
-      if (data.financialInfo?.balanceSheet?.totalLiabilities) {
-        metrics.totalLiabilities += data.financialInfo.balanceSheet.totalLiabilities;
+      // Calculate ratios
+      if (metrics.totalAssets > 0) {
+        metrics.debtToAssetRatio = metrics.totalLiabilities / metrics.totalAssets;
+        metrics.returnOnAssets = metrics.netIncome / metrics.totalAssets;
       }
       
-      // Cash flow
-      if (data.financialInfo?.cashFlow?.operatingCashFlow) {
-        metrics.operatingCashFlow += data.financialInfo.cashFlow.operatingCashFlow;
+      if (metrics.totalRevenue > 0) {
+        metrics.profitMargin = metrics.netIncome / metrics.totalRevenue;
       }
-    }
-    
-    // Calculate ratios
-    if (metrics.totalAssets > 0) {
-      metrics.debtToAssetRatio = metrics.totalLiabilities / metrics.totalAssets;
-      metrics.returnOnAssets = metrics.netIncome / metrics.totalAssets;
-    }
-    
-    if (metrics.totalRevenue > 0) {
-      metrics.profitMargin = metrics.netIncome / metrics.totalRevenue;
+    } catch (error) {
+      console.error('Error calculating financial metrics:', error);
     }
     
     return metrics;

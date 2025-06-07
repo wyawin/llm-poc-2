@@ -145,7 +145,14 @@ class ApiService {
       }
 
       const result = await response.json();
-      console.log('Credit recommendation received:', result);
+      console.log('Credit recommendation received successfully');
+      console.log('Recommendation structure:', {
+        hasScore: !!result.score,
+        hasRecommendation: !!result.recommendation,
+        hasGroupedData: !!result.groupedFinancialData,
+        hasTrends: !!result.financialTrends,
+        hasMultiPeriod: !!result.multiPeriodAnalysis
+      });
       
       // Validate recommendation structure
       if (!result.score && !result.recommendation) {
@@ -153,7 +160,41 @@ class ApiService {
         throw new Error('Invalid recommendation response format');
       }
       
-      return result;
+      // Ensure required fields have fallback values
+      const validatedResult: CreditRecommendation = {
+        score: result.score || 500,
+        recommendation: result.recommendation || 'decline',
+        riskLevel: result.riskLevel || 'high',
+        creditLimit: result.creditLimit || 0,
+        interestRate: result.interestRate || null,
+        
+        businessOverview: result.businessOverview || null,
+        financialAnalysis: result.financialAnalysis || null,
+        creditRiskAssessment: result.creditRiskAssessment || null,
+        
+        keyStrengths: result.keyStrengths || [],
+        keyWeaknesses: result.keyWeaknesses || [],
+        riskFactors: result.riskFactors || [],
+        mitigationStrategies: result.mitigationStrategies || [],
+        
+        reasons: result.reasons || [],
+        conditions: result.conditions || [],
+        
+        executiveSummary: result.executiveSummary || null,
+        confidenceLevel: result.confidenceLevel || 0.5,
+        analysisDate: result.analysisDate || new Date().toISOString(),
+        documentsAnalyzed: result.documentsAnalyzed || 0,
+        
+        documentSummary: result.documentSummary || null,
+        financialMetrics: result.financialMetrics || null,
+        
+        // New fields
+        groupedFinancialData: result.groupedFinancialData || null,
+        financialTrends: result.financialTrends || null,
+        multiPeriodAnalysis: result.multiPeriodAnalysis || null
+      };
+      
+      return validatedResult;
     } catch (error) {
       console.error('Generate credit recommendation error:', error);
       throw error;
