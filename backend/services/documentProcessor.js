@@ -56,7 +56,7 @@ export class DocumentProcessor {
         }
 
         // Step 3: Convert buffer-based PDF to images
-        console.log(`Converting PDF buffer to images...`);
+        console.log(`Converting PDF buffer to images...`, pdfInfo);
         const convertedImages = await this.convertPdfBufferToImages(pdfBuffer, pdfInfo);
         images.push(...convertedImages);
 
