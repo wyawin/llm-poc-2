@@ -11,9 +11,9 @@ export class CreditAnalyzer {
     };
   }
 
-  async generateRecommendation(allExtractedData, ollamaInsights) {
+  async generateRecommendation(allExtractedData, ollamaInsights, groupedFinancialData) {
     try {
-      console.log('Generating comprehensive credit recommendation');
+      console.log('Generating comprehensive credit recommendation with grouped financial data');
 
       // Use Ollama insights as primary recommendation
       const recommendation = {
@@ -48,8 +48,17 @@ export class CreditAnalyzer {
         // Document breakdown
         documentSummary: this.generateDocumentSummary(allExtractedData),
         
-        // Financial metrics
-        financialMetrics: this.calculateFinancialMetrics(allExtractedData)
+        // Enhanced financial metrics with grouped data
+        financialMetrics: this.calculateFinancialMetrics(allExtractedData),
+        
+        // NEW: Grouped financial data for table display
+        groupedFinancialData: groupedFinancialData,
+        
+        // NEW: Financial trends analysis
+        financialTrends: this.analyzeFinancialTrends(groupedFinancialData),
+        
+        // NEW: Multi-period analysis
+        multiPeriodAnalysis: this.generateMultiPeriodAnalysis(groupedFinancialData)
       };
 
       return recommendation;
@@ -58,6 +67,172 @@ export class CreditAnalyzer {
       console.error('Credit recommendation error:', error);
       throw new Error(`Failed to generate credit recommendation: ${error.message}`);
     }
+  }
+
+  analyzeFinancialTrends(groupedData) {
+    const trends = {
+      revenue: { trend: 'stable', changePercent: 0, periods: [] },
+      profitability: { trend: 'stable', changePercent: 0, periods: [] },
+      assets: { trend: 'stable', changePercent: 0, periods: [] },
+      liquidity: { trend: 'stable', changePercent: 0, periods: [] }
+    };
+
+    // Analyze P&L trends
+    if (groupedData.profitLossStatements.length >= 2) {
+      const sortedPL = [...groupedData.profitLossStatements].sort((a, b) => 
+        this.comparePeriods(a.period, b.period)
+      );
+
+      // Revenue trend
+      const revenueData = sortedPL.map(pl => ({ period: pl.period, value: pl.revenue }));
+      trends.revenue = this.calculateTrend(revenueData, 'Revenue');
+
+      // Profitability trend
+      const profitData = sortedPL.map(pl => ({ period: pl.period, value: pl.netIncome }));
+      trends.profitability = this.calculateTrend(profitData, 'Net Income');
+    }
+
+    // Analyze Balance Sheet trends
+    if (groupedData.balanceSheets.length >= 2) {
+      const sortedBS = [...groupedData.balanceSheets].sort((a, b) => 
+        this.comparePeriods(a.asOfDate, b.asOfDate)
+      );
+
+      // Assets trend
+      const assetsData = sortedBS.map(bs => ({ period: bs.asOfDate, value: bs.totalAssets }));
+      trends.assets = this.calculateTrend(assetsData, 'Total Assets');
+    }
+
+    // Analyze Bank Statement trends
+    if (groupedData.bankStatements.length >= 2) {
+      const sortedBank = [...groupedData.bankStatements].sort((a, b) => 
+        this.comparePeriods(a.period, b.period)
+      );
+
+      // Liquidity trend (average balance)
+      const liquidityData = sortedBank.map(bs => ({ period: bs.period, value: bs.balance }));
+      trends.liquidity = this.calculateTrend(liquidityData, 'Bank Balance');
+    }
+
+    return trends;
+  }
+
+  calculateTrend(data, label) {
+    if (data.length < 2) {
+      return { trend: 'insufficient_data', changePercent: 0, periods: [], label };
+    }
+
+    const firstValue = data[0].value || 0;
+    const lastValue = data[data.length - 1].value || 0;
+    
+    let changePercent = 0;
+    let trend = 'stable';
+
+    if (firstValue !== 0) {
+      changePercent = ((lastValue - firstValue) / Math.abs(firstValue)) * 100;
+      
+      if (changePercent > 10) {
+        trend = 'increasing';
+      } else if (changePercent < -10) {
+        trend = 'decreasing';
+      } else {
+        trend = 'stable';
+      }
+    } else if (lastValue > 0) {
+      trend = 'increasing';
+      changePercent = 100;
+    }
+
+    return {
+      trend,
+      changePercent: Math.round(changePercent * 100) / 100,
+      periods: data.map(d => d.period),
+      firstValue,
+      lastValue,
+      label
+    };
+  }
+
+  generateMultiPeriodAnalysis(groupedData) {
+    const analysis = {
+      periodsAnalyzed: new Set(),
+      consistencyScore: 0,
+      dataQuality: 'good',
+      keyInsights: [],
+      recommendations: []
+    };
+
+    // Collect all periods
+    groupedData.profitLossStatements.forEach(pl => analysis.periodsAnalyzed.add(pl.period));
+    groupedData.balanceSheets.forEach(bs => analysis.periodsAnalyzed.add(bs.asOfDate));
+    groupedData.bankStatements.forEach(bank => analysis.periodsAnalyzed.add(bank.period));
+    groupedData.cashFlowStatements.forEach(cf => analysis.periodsAnalyzed.add(cf.period));
+
+    analysis.periodsAnalyzed = Array.from(analysis.periodsAnalyzed).filter(p => p !== 'Unknown Period' && p !== 'Unknown Date');
+
+    // Calculate consistency score
+    const totalStatements = groupedData.profitLossStatements.length + 
+                           groupedData.balanceSheets.length + 
+                           groupedData.cashFlowStatements.length;
+    
+    if (totalStatements >= 6) {
+      analysis.consistencyScore = 0.9;
+      analysis.dataQuality = 'excellent';
+    } else if (totalStatements >= 3) {
+      analysis.consistencyScore = 0.7;
+      analysis.dataQuality = 'good';
+    } else {
+      analysis.consistencyScore = 0.4;
+      analysis.dataQuality = 'limited';
+    }
+
+    // Generate insights
+    if (groupedData.profitLossStatements.length >= 2) {
+      analysis.keyInsights.push('Multiple profit & loss statements available for trend analysis');
+    }
+    
+    if (groupedData.balanceSheets.length >= 2) {
+      analysis.keyInsights.push('Multiple balance sheets enable asset and liability trend evaluation');
+    }
+
+    if (groupedData.bankStatements.length >= 3) {
+      analysis.keyInsights.push('Comprehensive banking history provides strong cash flow insights');
+    }
+
+    // Generate recommendations
+    if (analysis.periodsAnalyzed.length < 2) {
+      analysis.recommendations.push('Request additional historical financial statements for better trend analysis');
+    }
+
+    if (groupedData.cashFlowStatements.length === 0) {
+      analysis.recommendations.push('Cash flow statements would enhance liquidity assessment');
+    }
+
+    if (groupedData.creditReports.length === 0) {
+      analysis.recommendations.push('Credit history report would improve risk assessment accuracy');
+    }
+
+    return analysis;
+  }
+
+  comparePeriods(periodA, periodB) {
+    if (!periodA || !periodB) return 0;
+    
+    // Try to extract year from period strings
+    const yearA = this.extractYear(periodA);
+    const yearB = this.extractYear(periodB);
+    
+    if (yearA && yearB) {
+      return yearA - yearB;
+    }
+    
+    // Fallback to string comparison
+    return periodA.localeCompare(periodB);
+  }
+
+  extractYear(period) {
+    const yearMatch = period.match(/\b(20\d{2})\b/);
+    return yearMatch ? parseInt(yearMatch[1]) : null;
   }
 
   extractReasons(insights) {

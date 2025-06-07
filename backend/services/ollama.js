@@ -35,6 +35,8 @@ Please extract the following information if available:
 6. Ownership Structure: directors, shareholders, ownership percentages
 7. Business Operations: business activities, establishment date, legal structure
 
+IMPORTANT: For financial statements with multiple periods, extract ALL periods found in the document.
+
 Return the data in this exact JSON structure:
 {
   "documentType": "string (specific document type)",
@@ -202,7 +204,7 @@ Only return valid JSON. If information is not available, use null for strings/nu
     }
   }
 
-  async generateCreditInsights(allExtractedData) {
+  async generateCreditInsights(allExtractedData, groupedFinancialData) {
     try {
       console.log('Generating comprehensive credit insights using deepseek-r1:8b');
 
@@ -210,6 +212,9 @@ Only return valid JSON. If information is not available, use null for strings/nu
 
 EXTRACTED DATA FROM MULTIPLE DOCUMENTS:
 ${JSON.stringify(allExtractedData, null, 2)}
+
+GROUPED FINANCIAL DATA BY TYPE AND PERIOD:
+${JSON.stringify(groupedFinancialData, null, 2)}
 
 Please provide a comprehensive analysis that includes:
 
@@ -219,10 +224,11 @@ Please provide a comprehensive analysis that includes:
    - Business model evaluation
 
 2. FINANCIAL ANALYSIS
-   - Revenue trends and profitability analysis
-   - Balance sheet strength assessment
-   - Cash flow analysis
+   - Revenue trends and profitability analysis (use grouped P&L data)
+   - Balance sheet strength assessment (use grouped balance sheet data)
+   - Cash flow analysis (use bank statements and cash flow data)
    - Debt capacity evaluation
+   - Multi-period trend analysis
 
 3. CREDIT RISK ASSESSMENT
    - Payment history evaluation
@@ -241,6 +247,12 @@ Please provide a comprehensive analysis that includes:
    - Risk rating (Low/Medium/High)
    - Recommended credit limit
    - Interest rate suggestion
+
+Pay special attention to:
+- Multi-period financial trends from grouped data
+- Consistency across different document types
+- Quality and completeness of financial information
+- Business stability indicators
 
 Return your analysis in this JSON structure:
 {

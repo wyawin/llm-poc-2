@@ -1,5 +1,5 @@
 import React from 'react';
-import { User, DollarSign, CreditCard, TrendingUp, AlertTriangle, CheckCircle, XCircle, Building, Users, FileText, BarChart3 } from 'lucide-react';
+import { User, DollarSign, CreditCard, TrendingUp, AlertTriangle, CheckCircle, XCircle, Building, Users, FileText, BarChart3, Calendar, TrendingDown } from 'lucide-react';
 import { DocumentFile, CreditRecommendation } from '../types';
 
 interface AnalysisResultsProps {
@@ -47,6 +47,24 @@ const AnalysisResults: React.FC<AnalysisResultsProps> = ({ documents, recommenda
       case 'medium': return 'text-yellow-600';
       case 'high': return 'text-red-600';
       default: return 'text-gray-600';
+    }
+  };
+
+  const getTrendIcon = (trend: string) => {
+    switch (trend) {
+      case 'increasing': return <TrendingUp className="w-4 h-4 text-green-600" />;
+      case 'decreasing': return <TrendingDown className="w-4 h-4 text-red-600" />;
+      case 'stable': return <BarChart3 className="w-4 h-4 text-blue-600" />;
+      default: return <BarChart3 className="w-4 h-4 text-gray-600" />;
+    }
+  };
+
+  const getTrendColor = (trend: string) => {
+    switch (trend) {
+      case 'increasing': return 'text-green-600 bg-green-50';
+      case 'decreasing': return 'text-red-600 bg-red-50';
+      case 'stable': return 'text-blue-600 bg-blue-50';
+      default: return 'text-gray-600 bg-gray-50';
     }
   };
 
@@ -117,6 +135,186 @@ const AnalysisResults: React.FC<AnalysisResultsProps> = ({ documents, recommenda
             <div className="mb-6 p-4 bg-blue-50 rounded-lg">
               <h5 className="font-semibold text-gray-900 mb-2">Executive Summary</h5>
               <p className="text-gray-700">{recommendation.executiveSummary}</p>
+            </div>
+          )}
+
+          {/* Financial Trends Analysis */}
+          {recommendation.financialTrends && (
+            <div className="mb-6">
+              <div className="flex items-center gap-2 mb-3">
+                <TrendingUp className="w-5 h-5 text-blue-600" />
+                <h5 className="font-semibold text-gray-900">Financial Trends Analysis</h5>
+              </div>
+              <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-4">
+                {Object.entries(recommendation.financialTrends).map(([key, trend]) => (
+                  <div key={key} className={`p-3 rounded-lg ${getTrendColor(trend.trend)}`}>
+                    <div className="flex items-center gap-2 mb-1">
+                      {getTrendIcon(trend.trend)}
+                      <span className="font-medium text-sm capitalize">{trend.label || key}</span>
+                    </div>
+                    <div className="text-lg font-bold">
+                      {trend.changePercent > 0 ? '+' : ''}{trend.changePercent}%
+                    </div>
+                    <div className="text-xs opacity-75 capitalize">{trend.trend}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Multi-Period Analysis Summary */}
+          {recommendation.multiPeriodAnalysis && (
+            <div className="mb-6">
+              <div className="flex items-center gap-2 mb-3">
+                <Calendar className="w-5 h-5 text-purple-600" />
+                <h5 className="font-semibold text-gray-900">Multi-Period Analysis</h5>
+              </div>
+              <div className="grid md:grid-cols-3 gap-4">
+                <div className="bg-purple-50 rounded-lg p-3">
+                  <div className="text-sm font-medium text-gray-700">Periods Analyzed</div>
+                  <div className="text-lg font-bold text-purple-600">
+                    {recommendation.multiPeriodAnalysis.periodsAnalyzed.length}
+                  </div>
+                </div>
+                <div className="bg-purple-50 rounded-lg p-3">
+                  <div className="text-sm font-medium text-gray-700">Data Quality</div>
+                  <div className="text-lg font-bold text-purple-600 capitalize">
+                    {recommendation.multiPeriodAnalysis.dataQuality}
+                  </div>
+                </div>
+                <div className="bg-purple-50 rounded-lg p-3">
+                  <div className="text-sm font-medium text-gray-700">Consistency Score</div>
+                  <div className="text-lg font-bold text-purple-600">
+                    {Math.round(recommendation.multiPeriodAnalysis.consistencyScore * 100)}%
+                  </div>
+                </div>
+              </div>
+              {recommendation.multiPeriodAnalysis.keyInsights.length > 0 && (
+                <div className="mt-3">
+                  <h6 className="font-medium text-gray-800 mb-2">Key Insights:</h6>
+                  <ul className="space-y-1">
+                    {recommendation.multiPeriodAnalysis.keyInsights.map((insight, index) => (
+                      <li key={index} className="flex items-start gap-2 text-sm text-gray-700">
+                        <div className="w-2 h-2 bg-purple-600 rounded-full mt-2 flex-shrink-0" />
+                        {insight}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Grouped Financial Data Tables */}
+          {recommendation.groupedFinancialData && (
+            <div className="mb-6">
+              <h5 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                <BarChart3 className="w-5 h-5 text-green-600" />
+                Financial Statements Summary
+              </h5>
+
+              {/* Profit & Loss Statements Table */}
+              {recommendation.groupedFinancialData.profitLossStatements.length > 0 && (
+                <div className="mb-6">
+                  <h6 className="font-medium text-gray-800 mb-3">Profit & Loss Statements</h6>
+                  <div className="overflow-x-auto">
+                    <table className="min-w-full bg-white border border-gray-200 rounded-lg">
+                      <thead className="bg-gray-50">
+                        <tr>
+                          <th className="px-4 py-2 text-left text-sm font-medium text-gray-700">Period</th>
+                          <th className="px-4 py-2 text-right text-sm font-medium text-gray-700">Revenue</th>
+                          <th className="px-4 py-2 text-right text-sm font-medium text-gray-700">Expenses</th>
+                          <th className="px-4 py-2 text-right text-sm font-medium text-gray-700">Net Income</th>
+                          <th className="px-4 py-2 text-right text-sm font-medium text-gray-700">Gross Profit</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {recommendation.groupedFinancialData.profitLossStatements.map((statement, index) => (
+                          <tr key={index} className="border-t border-gray-200">
+                            <td className="px-4 py-2 text-sm text-gray-900">{statement.period}</td>
+                            <td className="px-4 py-2 text-sm text-gray-900 text-right">{formatCurrency(statement.revenue)}</td>
+                            <td className="px-4 py-2 text-sm text-gray-900 text-right">{formatCurrency(statement.expenses)}</td>
+                            <td className={`px-4 py-2 text-sm text-right font-medium ${statement.netIncome >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                              {formatCurrency(statement.netIncome)}
+                            </td>
+                            <td className="px-4 py-2 text-sm text-gray-900 text-right">{formatCurrency(statement.grossProfit)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              {/* Balance Sheets Table */}
+              {recommendation.groupedFinancialData.balanceSheets.length > 0 && (
+                <div className="mb-6">
+                  <h6 className="font-medium text-gray-800 mb-3">Balance Sheets</h6>
+                  <div className="overflow-x-auto">
+                    <table className="min-w-full bg-white border border-gray-200 rounded-lg">
+                      <thead className="bg-gray-50">
+                        <tr>
+                          <th className="px-4 py-2 text-left text-sm font-medium text-gray-700">As of Date</th>
+                          <th className="px-4 py-2 text-right text-sm font-medium text-gray-700">Total Assets</th>
+                          <th className="px-4 py-2 text-right text-sm font-medium text-gray-700">Total Liabilities</th>
+                          <th className="px-4 py-2 text-right text-sm font-medium text-gray-700">Equity</th>
+                          <th className="px-4 py-2 text-right text-sm font-medium text-gray-700">Net Worth</th>
+                          <th className="px-4 py-2 text-right text-sm font-medium text-gray-700">Debt Ratio</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {recommendation.groupedFinancialData.balanceSheets.map((sheet, index) => (
+                          <tr key={index} className="border-t border-gray-200">
+                            <td className="px-4 py-2 text-sm text-gray-900">{sheet.asOfDate}</td>
+                            <td className="px-4 py-2 text-sm text-gray-900 text-right">{formatCurrency(sheet.totalAssets)}</td>
+                            <td className="px-4 py-2 text-sm text-gray-900 text-right">{formatCurrency(sheet.totalLiabilities)}</td>
+                            <td className="px-4 py-2 text-sm text-gray-900 text-right">{formatCurrency(sheet.equity)}</td>
+                            <td className={`px-4 py-2 text-sm text-right font-medium ${sheet.netWorth >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                              {formatCurrency(sheet.netWorth)}
+                            </td>
+                            <td className="px-4 py-2 text-sm text-gray-900 text-right">{(sheet.debtToAssetRatio * 100).toFixed(1)}%</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              {/* Bank Statements Summary */}
+              {recommendation.groupedFinancialData.bankStatements.length > 0 && (
+                <div className="mb-6">
+                  <h6 className="font-medium text-gray-800 mb-3">Bank Statements Summary</h6>
+                  <div className="overflow-x-auto">
+                    <table className="min-w-full bg-white border border-gray-200 rounded-lg">
+                      <thead className="bg-gray-50">
+                        <tr>
+                          <th className="px-4 py-2 text-left text-sm font-medium text-gray-700">Period</th>
+                          <th className="px-4 py-2 text-left text-sm font-medium text-gray-700">Account</th>
+                          <th className="px-4 py-2 text-left text-sm font-medium text-gray-700">Type</th>
+                          <th className="px-4 py-2 text-right text-sm font-medium text-gray-700">Balance</th>
+                          <th className="px-4 py-2 text-right text-sm font-medium text-gray-700">Total Credits</th>
+                          <th className="px-4 py-2 text-right text-sm font-medium text-gray-700">Total Debits</th>
+                          <th className="px-4 py-2 text-right text-sm font-medium text-gray-700">Transactions</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {recommendation.groupedFinancialData.bankStatements.map((statement, index) => (
+                          <tr key={index} className="border-t border-gray-200">
+                            <td className="px-4 py-2 text-sm text-gray-900">{statement.period}</td>
+                            <td className="px-4 py-2 text-sm text-gray-900">{statement.accountNumber}</td>
+                            <td className="px-4 py-2 text-sm text-gray-900">{statement.accountType}</td>
+                            <td className="px-4 py-2 text-sm text-gray-900 text-right font-medium">{formatCurrency(statement.balance)}</td>
+                            <td className="px-4 py-2 text-sm text-green-600 text-right">{formatCurrency(statement.totalCredits)}</td>
+                            <td className="px-4 py-2 text-sm text-red-600 text-right">{formatCurrency(statement.totalDebits)}</td>
+                            <td className="px-4 py-2 text-sm text-gray-900 text-right">{statement.transactionCount}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 

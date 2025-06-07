@@ -241,6 +241,257 @@ export class DocumentProcessor {
     return combined;
   }
 
+  // New method to group and structure financial data across multiple documents
+  groupFinancialDocuments(allExtractedData) {
+    console.log('Grouping financial documents by type and period...');
+    
+    const groupedData = {
+      profitLossStatements: [],
+      balanceSheets: [],
+      bankStatements: [],
+      creditReports: [],
+      cashFlowStatements: [],
+      otherDocuments: [],
+      summary: {
+        totalDocuments: allExtractedData.length,
+        documentTypes: new Set(),
+        periods: new Set(),
+        companies: new Set()
+      }
+    };
+
+    // Process each document
+    for (const data of allExtractedData) {
+      // Add to summary
+      groupedData.summary.documentTypes.add(data.documentType);
+      if (data.companyInfo?.name) {
+        groupedData.summary.companies.add(data.companyInfo.name);
+      }
+
+      // Group by document type
+      switch (data.documentType.toLowerCase()) {
+        case 'profit and loss statement':
+        case 'profit & loss':
+        case 'income statement':
+        case 'p&l statement':
+          this.addProfitLossData(groupedData.profitLossStatements, data);
+          break;
+
+        case 'balance sheet':
+        case 'statement of financial position':
+          this.addBalanceSheetData(groupedData.balanceSheets, data);
+          break;
+
+        case 'bank statement':
+        case 'bank statements':
+          this.addBankStatementData(groupedData.bankStatements, data);
+          break;
+
+        case 'credit history report':
+        case 'credit report':
+        case 'credit history':
+          this.addCreditReportData(groupedData.creditReports, data);
+          break;
+
+        case 'cash flow statement':
+        case 'statement of cash flows':
+          this.addCashFlowData(groupedData.cashFlowStatements, data);
+          break;
+
+        default:
+          groupedData.otherDocuments.push({
+            documentType: data.documentType,
+            sourceFile: data.sourceFile,
+            extractionDate: data.extractionDate,
+            data: data
+          });
+      }
+    }
+
+    // Convert sets to arrays for JSON serialization
+    groupedData.summary.documentTypes = Array.from(groupedData.summary.documentTypes);
+    groupedData.summary.periods = Array.from(groupedData.summary.periods);
+    groupedData.summary.companies = Array.from(groupedData.summary.companies);
+
+    // Sort financial statements by period
+    groupedData.profitLossStatements.sort((a, b) => this.comparePeriods(a.period, b.period));
+    groupedData.balanceSheets.sort((a, b) => this.comparePeriods(a.asOfDate, b.asOfDate));
+    groupedData.cashFlowStatements.sort((a, b) => this.comparePeriods(a.period, b.period));
+
+    console.log(`Grouped data summary:`, {
+      profitLoss: groupedData.profitLossStatements.length,
+      balanceSheets: groupedData.balanceSheets.length,
+      bankStatements: groupedData.bankStatements.length,
+      creditReports: groupedData.creditReports.length,
+      cashFlow: groupedData.cashFlowStatements.length,
+      other: groupedData.otherDocuments.length
+    });
+
+    return groupedData;
+  }
+
+  addProfitLossData(statements, data) {
+    if (data.financialInfo?.profitLoss && Object.keys(data.financialInfo.profitLoss).length > 0) {
+      const statement = {
+        period: data.financialInfo.profitLoss.period || 'Unknown Period',
+        revenue: data.financialInfo.profitLoss.revenue || 0,
+        expenses: data.financialInfo.profitLoss.expenses || 0,
+        netIncome: data.financialInfo.profitLoss.netIncome || 0,
+        grossProfit: (data.financialInfo.profitLoss.revenue || 0) - (data.financialInfo.profitLoss.expenses || 0),
+        sourceFile: data.sourceFile,
+        extractionDate: data.extractionDate,
+        confidence: data.confidence,
+        companyName: data.companyInfo?.name || 'Unknown Company'
+      };
+
+      // Add to periods summary
+      if (statement.period !== 'Unknown Period') {
+        this.addToPeriodsSummary(statement.period);
+      }
+
+      statements.push(statement);
+    }
+  }
+
+  addBalanceSheetData(sheets, data) {
+    if (data.financialInfo?.balanceSheet && Object.keys(data.financialInfo.balanceSheet).length > 0) {
+      const sheet = {
+        asOfDate: data.financialInfo.balanceSheet.asOfDate || 'Unknown Date',
+        totalAssets: data.financialInfo.balanceSheet.totalAssets || 0,
+        totalLiabilities: data.financialInfo.balanceSheet.totalLiabilities || 0,
+        equity: data.financialInfo.balanceSheet.equity || 0,
+        netWorth: (data.financialInfo.balanceSheet.totalAssets || 0) - (data.financialInfo.balanceSheet.totalLiabilities || 0),
+        debtToAssetRatio: data.financialInfo.balanceSheet.totalAssets > 0 ? 
+          (data.financialInfo.balanceSheet.totalLiabilities || 0) / data.financialInfo.balanceSheet.totalAssets : 0,
+        sourceFile: data.sourceFile,
+        extractionDate: data.extractionDate,
+        confidence: data.confidence,
+        companyName: data.companyInfo?.name || 'Unknown Company'
+      };
+
+      // Add to periods summary
+      if (sheet.asOfDate !== 'Unknown Date') {
+        this.addToPeriodsSummary(sheet.asOfDate);
+      }
+
+      sheets.push(sheet);
+    }
+  }
+
+  addBankStatementData(statements, data) {
+    if (data.financialInfo?.bankStatements && data.financialInfo.bankStatements.length > 0) {
+      for (const bankStatement of data.financialInfo.bankStatements) {
+        const statement = {
+          period: bankStatement.period || 'Unknown Period',
+          accountNumber: bankStatement.accountNumber || 'Unknown Account',
+          accountType: bankStatement.accountType || 'Unknown Type',
+          balance: bankStatement.balance || 0,
+          transactionCount: bankStatement.transactions?.length || 0,
+          totalCredits: this.calculateTotalCredits(bankStatement.transactions || []),
+          totalDebits: this.calculateTotalDebits(bankStatement.transactions || []),
+          averageBalance: bankStatement.balance || 0,
+          sourceFile: data.sourceFile,
+          extractionDate: data.extractionDate,
+          confidence: data.confidence,
+          companyName: data.companyInfo?.name || 'Unknown Company',
+          transactions: bankStatement.transactions || []
+        };
+
+        // Add to periods summary
+        if (statement.period !== 'Unknown Period') {
+          this.addToPeriodsSummary(statement.period);
+        }
+
+        statements.push(statement);
+      }
+    }
+  }
+
+  addCreditReportData(reports, data) {
+    if (data.financialInfo?.creditInfo) {
+      const report = {
+        reportDate: data.extractionDate,
+        creditScore: data.financialInfo.creditInfo.creditScore || 0,
+        creditHistory: data.financialInfo.creditInfo.creditHistory || [],
+        totalCreditAccounts: data.financialInfo.creditInfo.creditHistory?.length || 0,
+        totalCreditBalance: this.calculateTotalCreditBalance(data.financialInfo.creditInfo.creditHistory || []),
+        sourceFile: data.sourceFile,
+        extractionDate: data.extractionDate,
+        confidence: data.confidence,
+        companyName: data.companyInfo?.name || 'Unknown Company'
+      };
+
+      reports.push(report);
+    }
+  }
+
+  addCashFlowData(statements, data) {
+    if (data.financialInfo?.cashFlow && Object.keys(data.financialInfo.cashFlow).length > 0) {
+      const statement = {
+        period: data.financialInfo.cashFlow.period || 'Unknown Period',
+        operatingCashFlow: data.financialInfo.cashFlow.operatingCashFlow || 0,
+        investingCashFlow: data.financialInfo.cashFlow.investingCashFlow || 0,
+        financingCashFlow: data.financialInfo.cashFlow.financingCashFlow || 0,
+        netCashFlow: (data.financialInfo.cashFlow.operatingCashFlow || 0) + 
+                     (data.financialInfo.cashFlow.investingCashFlow || 0) + 
+                     (data.financialInfo.cashFlow.financingCashFlow || 0),
+        sourceFile: data.sourceFile,
+        extractionDate: data.extractionDate,
+        confidence: data.confidence,
+        companyName: data.companyInfo?.name || 'Unknown Company'
+      };
+
+      // Add to periods summary
+      if (statement.period !== 'Unknown Period') {
+        this.addToPeriodsSummary(statement.period);
+      }
+
+      statements.push(statement);
+    }
+  }
+
+  addToPeriodsSummary(period) {
+    // This would be called with a reference to the summary periods set
+    // Implementation depends on how we want to track periods
+  }
+
+  calculateTotalCredits(transactions) {
+    return transactions
+      .filter(t => t.type === 'credit')
+      .reduce((sum, t) => sum + (t.amount || 0), 0);
+  }
+
+  calculateTotalDebits(transactions) {
+    return transactions
+      .filter(t => t.type === 'debit')
+      .reduce((sum, t) => sum + (t.amount || 0), 0);
+  }
+
+  calculateTotalCreditBalance(creditHistory) {
+    return creditHistory.reduce((sum, credit) => sum + (credit.balance || 0), 0);
+  }
+
+  comparePeriods(periodA, periodB) {
+    // Simple period comparison - can be enhanced for better date parsing
+    if (!periodA || !periodB) return 0;
+    
+    // Try to extract year from period strings
+    const yearA = this.extractYear(periodA);
+    const yearB = this.extractYear(periodB);
+    
+    if (yearA && yearB) {
+      return yearA - yearB;
+    }
+    
+    // Fallback to string comparison
+    return periodA.localeCompare(periodB);
+  }
+
+  extractYear(period) {
+    const yearMatch = period.match(/\b(20\d{2})\b/);
+    return yearMatch ? parseInt(yearMatch[1]) : null;
+  }
+
   removeDuplicateStatements(statements) {
     const seen = new Set();
     return statements.filter(statement => {

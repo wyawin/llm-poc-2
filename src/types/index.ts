@@ -82,6 +82,110 @@ export interface CreditEntry {
   monthlyPayment?: number;
 }
 
+export interface GroupedFinancialData {
+  profitLossStatements: ProfitLossStatement[];
+  balanceSheets: BalanceSheetStatement[];
+  bankStatements: BankStatementSummary[];
+  creditReports: CreditReport[];
+  cashFlowStatements: CashFlowStatement[];
+  otherDocuments: OtherDocument[];
+  summary: {
+    totalDocuments: number;
+    documentTypes: string[];
+    periods: string[];
+    companies: string[];
+  };
+}
+
+export interface ProfitLossStatement {
+  period: string;
+  revenue: number;
+  expenses: number;
+  netIncome: number;
+  grossProfit: number;
+  sourceFile: string;
+  extractionDate: string;
+  confidence: number;
+  companyName: string;
+}
+
+export interface BalanceSheetStatement {
+  asOfDate: string;
+  totalAssets: number;
+  totalLiabilities: number;
+  equity: number;
+  netWorth: number;
+  debtToAssetRatio: number;
+  sourceFile: string;
+  extractionDate: string;
+  confidence: number;
+  companyName: string;
+}
+
+export interface BankStatementSummary {
+  period: string;
+  accountNumber: string;
+  accountType: string;
+  balance: number;
+  transactionCount: number;
+  totalCredits: number;
+  totalDebits: number;
+  averageBalance: number;
+  sourceFile: string;
+  extractionDate: string;
+  confidence: number;
+  companyName: string;
+  transactions: Transaction[];
+}
+
+export interface CreditReport {
+  reportDate: string;
+  creditScore: number;
+  creditHistory: CreditEntry[];
+  totalCreditAccounts: number;
+  totalCreditBalance: number;
+  sourceFile: string;
+  extractionDate: string;
+  confidence: number;
+  companyName: string;
+}
+
+export interface CashFlowStatement {
+  period: string;
+  operatingCashFlow: number;
+  investingCashFlow: number;
+  financingCashFlow: number;
+  netCashFlow: number;
+  sourceFile: string;
+  extractionDate: string;
+  confidence: number;
+  companyName: string;
+}
+
+export interface OtherDocument {
+  documentType: string;
+  sourceFile: string;
+  extractionDate: string;
+  data: ExtractedData;
+}
+
+export interface FinancialTrend {
+  trend: 'increasing' | 'decreasing' | 'stable' | 'insufficient_data';
+  changePercent: number;
+  periods: string[];
+  firstValue?: number;
+  lastValue?: number;
+  label?: string;
+}
+
+export interface MultiPeriodAnalysis {
+  periodsAnalyzed: string[];
+  consistencyScore: number;
+  dataQuality: 'excellent' | 'good' | 'limited';
+  keyInsights: string[];
+  recommendations: string[];
+}
+
 export interface CreditRecommendation {
   score: number;
   recommendation: 'approve' | 'conditional' | 'decline';
@@ -146,4 +250,18 @@ export interface CreditRecommendation {
     profitMargin: number;
     returnOnAssets: number;
   };
+
+  // NEW: Grouped financial data for table display
+  groupedFinancialData?: GroupedFinancialData;
+  
+  // NEW: Financial trends analysis
+  financialTrends?: {
+    revenue: FinancialTrend;
+    profitability: FinancialTrend;
+    assets: FinancialTrend;
+    liquidity: FinancialTrend;
+  };
+  
+  // NEW: Multi-period analysis
+  multiPeriodAnalysis?: MultiPeriodAnalysis;
 }

@@ -13,7 +13,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
-const PORT = process.env.PORT || 3001;
+const PORT = process.env.PORT || 8000;
 
 // Middleware
 app.use(cors());
@@ -77,7 +77,7 @@ app.get('/health', async (req, res) => {
   try {
     const ollamaHealth = await ollamaService.checkHealth();
     await ollamaService.ensureModelsExist();
-    console.log('health', ollamaHealth);
+    
     res.json({ 
       status: 'OK', 
       timestamp: new Date().toISOString(),
@@ -94,7 +94,7 @@ app.get('/health', async (req, res) => {
 });
 
 // Upload multiple documents
-app.post('/upload', upload.array('documents', 50), async (req, res) => {
+app.post('/upload', upload.array('documents', 10), async (req, res) => {
   try {
     if (!req.files || req.files.length === 0) {
       return res.status(400).json({ error: 'No files uploaded' });
@@ -189,7 +189,7 @@ app.get('/status/:id', (req, res) => {
   }
 });
 
-// Generate comprehensive credit recommendation with insights
+// Generate comprehensive credit recommendation with insights and grouped financial data
 app.post('/recommend', async (req, res) => {
   try {
     const { document_ids } = req.body;
@@ -214,13 +214,18 @@ app.post('/recommend', async (req, res) => {
       return res.status(400).json({ error: 'No completed documents found for analysis' });
     }
 
+    console.log('Grouping financial documents by type and period...');
+    
+    // NEW: Group financial documents by type and period
+    const groupedFinancialData = documentProcessor.groupFinancialDocuments(allExtractedData);
+
     console.log('Generating comprehensive credit insights using deepseek-r1:8b...');
 
-    // Generate comprehensive insights using deepseek-r1:8b
-    const ollamaInsights = await ollamaService.generateCreditInsights(allExtractedData);
+    // Generate comprehensive insights using deepseek-r1:8b with grouped data
+    const ollamaInsights = await ollamaService.generateCreditInsights(allExtractedData, groupedFinancialData);
 
-    // Generate final recommendation combining Ollama insights with traditional analysis
-    const recommendation = await creditAnalyzer.generateRecommendation(allExtractedData, ollamaInsights);
+    // Generate final recommendation combining Ollama insights with traditional analysis and grouped data
+    const recommendation = await creditAnalyzer.generateRecommendation(allExtractedData, ollamaInsights, groupedFinancialData);
 
     res.json(recommendation);
   } catch (error) {
@@ -321,7 +326,7 @@ app.use((error, req, res, next) => {
 });
 
 // Start server
-app.listen(PORT, '0.0.0.0', () => {
+app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
   console.log(`Health check: http://localhost:${PORT}/health`);
   console.log('Required Ollama models: qwen2.5vl:7b, deepseek-r1:8b');
