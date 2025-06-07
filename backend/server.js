@@ -94,7 +94,7 @@ app.get('/health', async (req, res) => {
 });
 
 // Upload multiple documents
-app.post('/upload', upload.array('documents', 10), async (req, res) => {
+app.post('/upload', upload.array('documents', 50), async (req, res) => {
   try {
     if (!req.files || req.files.length === 0) {
       return res.status(400).json({ error: 'No files uploaded' });
