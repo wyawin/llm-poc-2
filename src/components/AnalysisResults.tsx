@@ -50,6 +50,222 @@ const AnalysisResults: React.FC<AnalysisResultsProps> = ({ documents, recommenda
     }
   };
 
+  // Helper function to render financial data in table format
+  const renderFinancialTable = (data: any, title: string, type: 'profitLoss' | 'balanceSheet' | 'cashFlow') => {
+    if (!data || Object.keys(data).length === 0) return null;
+
+    const getTableHeaders = () => {
+      switch (type) {
+        case 'profitLoss':
+          return ['Item', 'Amount', 'Period'];
+        case 'balanceSheet':
+          return ['Item', 'Amount', 'As of Date'];
+        case 'cashFlow':
+          return ['Item', 'Amount', 'Period'];
+        default:
+          return ['Item', 'Value'];
+      }
+    };
+
+    const getTableRows = () => {
+      const rows = [];
+      
+      Object.entries(data).forEach(([key, value]) => {
+        if (value !== null && value !== undefined && value !== '') {
+          const displayKey = key.replace(/([A-Z])/g, ' $1').trim()
+            .replace(/^./, str => str.toUpperCase());
+          
+          if (type === 'profitLoss') {
+            if (key === 'period') return;
+            rows.push([
+              displayKey,
+              typeof value === 'number' ? formatCurrency(value) : value,
+              data.period || 'N/A'
+            ]);
+          } else if (type === 'balanceSheet') {
+            if (key === 'asOfDate') return;
+            rows.push([
+              displayKey,
+              typeof value === 'number' ? formatCurrency(value) : value,
+              data.asOfDate || 'N/A'
+            ]);
+          } else if (type === 'cashFlow') {
+            if (key === 'period') return;
+            rows.push([
+              displayKey,
+              typeof value === 'number' ? formatCurrency(value) : value,
+              data.period || 'N/A'
+            ]);
+          } else {
+            rows.push([
+              displayKey,
+              typeof value === 'number' ? formatCurrency(value) : value
+            ]);
+          }
+        }
+      });
+      
+      return rows;
+    };
+
+    const headers = getTableHeaders();
+    const rows = getTableRows();
+
+    if (rows.length === 0) return null;
+
+    return (
+      <div className="mb-6">
+        <h6 className="font-medium text-gray-800 mb-3">{title}</h6>
+        <div className="overflow-x-auto">
+          <table className="min-w-full bg-white border border-gray-200 rounded-lg">
+            <thead className="bg-gray-50">
+              <tr>
+                {headers.map((header, index) => (
+                  <th key={index} className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-b">
+                    {header}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-200">
+              {rows.map((row, index) => (
+                <tr key={index} className="hover:bg-gray-50">
+                  {row.map((cell, cellIndex) => (
+                    <td key={cellIndex} className="px-4 py-3 text-sm text-gray-900 border-b">
+                      {cell}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    );
+  };
+
+  // Helper function to render bank statements table
+  const renderBankStatementsTable = (statements: any[]) => {
+    if (!statements || statements.length === 0) return null;
+
+    return (
+      <div className="mb-6">
+        <h6 className="font-medium text-gray-800 mb-3">Bank Statements</h6>
+        <div className="space-y-4">
+          {statements.map((statement, index) => (
+            <div key={index} className="border border-gray-200 rounded-lg overflow-hidden">
+              <div className="bg-gray-50 px-4 py-3 border-b">
+                <div className="flex justify-between items-center">
+                  <div>
+                    <span className="font-medium text-gray-900">Account: {statement.accountNumber}</span>
+                    <span className="ml-4 text-sm text-gray-600">Type: {statement.accountType}</span>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-lg font-bold text-green-600">
+                      Balance: {formatCurrency(statement.balance)}
+                    </div>
+                    <div className="text-sm text-gray-600">Period: {statement.period}</div>
+                  </div>
+                </div>
+              </div>
+              
+              {statement.transactions && statement.transactions.length > 0 && (
+                <div className="overflow-x-auto">
+                  <table className="min-w-full">
+                    <thead className="bg-gray-100">
+                      <tr>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Date</th>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Description</th>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Type</th>
+                        <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">Amount</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-200">
+                      {statement.transactions.slice(0, 10).map((transaction: any, txIndex: number) => (
+                        <tr key={txIndex} className="hover:bg-gray-50">
+                          <td className="px-4 py-2 text-sm text-gray-900">{transaction.date}</td>
+                          <td className="px-4 py-2 text-sm text-gray-900">{transaction.description}</td>
+                          <td className="px-4 py-2 text-sm">
+                            <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                              transaction.type === 'credit' 
+                                ? 'bg-green-100 text-green-800' 
+                                : 'bg-red-100 text-red-800'
+                            }`}>
+                              {transaction.type}
+                            </span>
+                          </td>
+                          <td className="px-4 py-2 text-sm text-right font-medium">
+                            <span className={transaction.type === 'credit' ? 'text-green-600' : 'text-red-600'}>
+                              {formatCurrency(transaction.amount)}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  {statement.transactions.length > 10 && (
+                    <div className="px-4 py-2 bg-gray-50 text-sm text-gray-600 text-center">
+                      Showing 10 of {statement.transactions.length} transactions
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  };
+
+  // Helper function to render credit history table
+  const renderCreditHistoryTable = (creditHistory: any[]) => {
+    if (!creditHistory || creditHistory.length === 0) return null;
+
+    return (
+      <div className="mb-6">
+        <h6 className="font-medium text-gray-800 mb-3">Credit History</h6>
+        <div className="overflow-x-auto">
+          <table className="min-w-full bg-white border border-gray-200 rounded-lg">
+            <thead className="bg-gray-50">
+              <tr>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Creditor</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Account Type</th>
+                <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Balance</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Payment Status</th>
+                <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Monthly Payment</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-200">
+              {creditHistory.map((credit, index) => (
+                <tr key={index} className="hover:bg-gray-50">
+                  <td className="px-4 py-3 text-sm text-gray-900">{credit.creditor}</td>
+                  <td className="px-4 py-3 text-sm text-gray-900">{credit.accountType}</td>
+                  <td className="px-4 py-3 text-sm text-right font-medium text-gray-900">
+                    {formatCurrency(credit.balance)}
+                  </td>
+                  <td className="px-4 py-3 text-sm">
+                    <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                      credit.paymentStatus?.toLowerCase().includes('current') || credit.paymentStatus?.toLowerCase().includes('good')
+                        ? 'bg-green-100 text-green-800'
+                        : credit.paymentStatus?.toLowerCase().includes('late') || credit.paymentStatus?.toLowerCase().includes('overdue')
+                        ? 'bg-red-100 text-red-800'
+                        : 'bg-yellow-100 text-yellow-800'
+                    }`}>
+                      {credit.paymentStatus}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3 text-sm text-right text-gray-900">
+                    {credit.monthlyPayment ? formatCurrency(credit.monthlyPayment) : 'N/A'}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="space-y-6">
       <h3 className="text-2xl font-bold text-gray-900">Analysis Results</h3>
@@ -337,17 +553,27 @@ const AnalysisResults: React.FC<AnalysisResultsProps> = ({ documents, recommenda
                       <Building className="w-5 h-5 text-blue-600" />
                       <h5 className="font-semibold text-gray-900">Company Information</h5>
                     </div>
-                    <div className="grid md:grid-cols-2 gap-4">
-                      {Object.entries(doc.extractedData.companyInfo).map(([key, value]) => (
-                        value && (
-                          <div key={key} className="bg-gray-50 rounded-lg p-3">
-                            <span className="text-sm font-medium text-gray-600 capitalize">
-                              {key.replace(/([A-Z])/g, ' $1').trim()}:
-                            </span>
-                            <div className="text-gray-900">{value}</div>
-                          </div>
-                        )
-                      ))}
+                    <div className="overflow-x-auto">
+                      <table className="min-w-full bg-white border border-gray-200 rounded-lg">
+                        <thead className="bg-gray-50">
+                          <tr>
+                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Field</th>
+                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Value</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-200">
+                          {Object.entries(doc.extractedData.companyInfo).map(([key, value]) => (
+                            value && (
+                              <tr key={key} className="hover:bg-gray-50">
+                                <td className="px-4 py-3 text-sm font-medium text-gray-900 capitalize">
+                                  {key.replace(/([A-Z])/g, ' $1').trim()}
+                                </td>
+                                <td className="px-4 py-3 text-sm text-gray-700">{value}</td>
+                              </tr>
+                            )
+                          ))}
+                        </tbody>
+                      </table>
                     </div>
                   </div>
                 )}
@@ -359,20 +585,29 @@ const AnalysisResults: React.FC<AnalysisResultsProps> = ({ documents, recommenda
                       <Users className="w-5 h-5 text-purple-600" />
                       <h5 className="font-semibold text-gray-900">Key Personnel</h5>
                     </div>
-                    <div className="grid gap-4">
-                      {doc.extractedData.personalInfo.individuals.map((individual, index) => (
-                        <div key={index} className="bg-gray-50 rounded-lg p-4">
-                          <div className="flex justify-between items-start mb-2">
-                            <div className="font-medium text-gray-900">{individual.name}</div>
-                            <div className="text-sm text-gray-600">{individual.position}</div>
-                          </div>
-                          {individual.ownershipPercentage && (
-                            <div className="text-sm text-gray-600">
-                              Ownership: {individual.ownershipPercentage}%
-                            </div>
-                          )}
-                        </div>
-                      ))}
+                    <div className="overflow-x-auto">
+                      <table className="min-w-full bg-white border border-gray-200 rounded-lg">
+                        <thead className="bg-gray-50">
+                          <tr>
+                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
+                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Position</th>
+                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Address</th>
+                            <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Ownership %</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-200">
+                          {doc.extractedData.personalInfo.individuals.map((individual, index) => (
+                            <tr key={index} className="hover:bg-gray-50">
+                              <td className="px-4 py-3 text-sm font-medium text-gray-900">{individual.name}</td>
+                              <td className="px-4 py-3 text-sm text-gray-700">{individual.position || 'N/A'}</td>
+                              <td className="px-4 py-3 text-sm text-gray-700">{individual.address || 'N/A'}</td>
+                              <td className="px-4 py-3 text-sm text-right text-gray-700">
+                                {individual.ownershipPercentage ? `${individual.ownershipPercentage}%` : 'N/A'}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
                     </div>
                   </div>
                 )}
@@ -385,67 +620,43 @@ const AnalysisResults: React.FC<AnalysisResultsProps> = ({ documents, recommenda
                       <h5 className="font-semibold text-gray-900">Financial Information</h5>
                     </div>
 
-                    {/* Profit & Loss */}
-                    {doc.extractedData.financialInfo.profitLoss && Object.keys(doc.extractedData.financialInfo.profitLoss).length > 0 && (
-                      <div className="mb-4">
-                        <h6 className="font-medium text-gray-800 mb-2">Profit & Loss</h6>
-                        <div className="grid md:grid-cols-3 gap-4">
-                          {Object.entries(doc.extractedData.financialInfo.profitLoss).map(([key, value]) => (
-                            value && (
-                              <div key={key} className="bg-green-50 rounded-lg p-3">
-                                <div className="text-sm font-medium text-gray-600 capitalize">
-                                  {key.replace(/([A-Z])/g, ' $1').trim()}
-                                </div>
-                                <div className="text-lg font-bold text-green-600">
-                                  {typeof value === 'number' ? formatCurrency(value) : value}
-                                </div>
-                              </div>
-                            )
-                          ))}
-                        </div>
-                      </div>
+                    {/* Profit & Loss Table */}
+                    {renderFinancialTable(
+                      doc.extractedData.financialInfo.profitLoss,
+                      'Profit & Loss Statement',
+                      'profitLoss'
                     )}
 
-                    {/* Balance Sheet */}
-                    {doc.extractedData.financialInfo.balanceSheet && Object.keys(doc.extractedData.financialInfo.balanceSheet).length > 0 && (
-                      <div className="mb-4">
-                        <h6 className="font-medium text-gray-800 mb-2">Balance Sheet</h6>
-                        <div className="grid md:grid-cols-3 gap-4">
-                          {Object.entries(doc.extractedData.financialInfo.balanceSheet).map(([key, value]) => (
-                            value && (
-                              <div key={key} className="bg-blue-50 rounded-lg p-3">
-                                <div className="text-sm font-medium text-gray-600 capitalize">
-                                  {key.replace(/([A-Z])/g, ' $1').trim()}
-                                </div>
-                                <div className="text-lg font-bold text-blue-600">
-                                  {typeof value === 'number' ? formatCurrency(value) : value}
-                                </div>
-                              </div>
-                            )
-                          ))}
-                        </div>
-                      </div>
+                    {/* Balance Sheet Table */}
+                    {renderFinancialTable(
+                      doc.extractedData.financialInfo.balanceSheet,
+                      'Balance Sheet',
+                      'balanceSheet'
                     )}
 
-                    {/* Bank Statements */}
-                    {doc.extractedData.financialInfo.bankStatements && doc.extractedData.financialInfo.bankStatements.length > 0 && (
-                      <div className="mb-4">
-                        <h6 className="font-medium text-gray-800 mb-2">Bank Statements</h6>
-                        {doc.extractedData.financialInfo.bankStatements.map((statement, index) => (
-                          <div key={index} className="bg-gray-50 rounded-lg p-4 mb-3">
-                            <div className="flex justify-between items-center mb-2">
-                              <span className="font-medium">Account: {statement.accountNumber}</span>
-                              <span className="text-lg font-bold text-green-600">
-                                {formatCurrency(statement.balance)}
-                              </span>
+                    {/* Cash Flow Table */}
+                    {renderFinancialTable(
+                      doc.extractedData.financialInfo.cashFlow,
+                      'Cash Flow Statement',
+                      'cashFlow'
+                    )}
+
+                    {/* Bank Statements Table */}
+                    {renderBankStatementsTable(doc.extractedData.financialInfo.bankStatements)}
+
+                    {/* Credit Information */}
+                    {doc.extractedData.financialInfo.creditInfo && (
+                      <div className="mb-6">
+                        {doc.extractedData.financialInfo.creditInfo.creditScore && (
+                          <div className="mb-4 p-4 bg-blue-50 rounded-lg">
+                            <h6 className="font-medium text-gray-800 mb-2">Credit Score</h6>
+                            <div className="text-2xl font-bold text-blue-600">
+                              {doc.extractedData.financialInfo.creditInfo.creditScore}
                             </div>
-                            <p className="text-sm text-gray-600">Type: {statement.accountType}</p>
-                            <p className="text-sm text-gray-600">Period: {statement.period}</p>
-                            <p className="text-sm text-gray-600">
-                              {statement.transactions.length} transactions
-                            </p>
                           </div>
-                        ))}
+                        )}
+                        
+                        {renderCreditHistoryTable(doc.extractedData.financialInfo.creditInfo.creditHistory)}
                       </div>
                     )}
                   </div>
