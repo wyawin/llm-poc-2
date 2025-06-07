@@ -43,55 +43,109 @@ export class DocumentProcessor {
 
     try {
       if (mimeType === 'application/pdf') {
-        // Step 1: Parse PDF to Uint8Array first
-        console.log(`Reading PDF file to Uint8Array: ${filePath}`);
-        const pdfUint8Array = await this.parsePdfToUint8Array(filePath);
+        console.log(`Starting PDF conversion process: ${filePath}`);
         
-        // Step 2: Analyze PDF with Uint8Array
-        console.log(`Analyzing PDF from Uint8Array...`);
-        const pdfInfo = await this.analyzePdfFromUint8Array(pdfUint8Array, password);
-        
-        if (pdfInfo.isEncrypted && !pdfInfo.password) {
-          throw new Error('PDF is encrypted and requires a password. Please provide the password or try common passwords.');
+        // Step 1: Validate file exists and is readable
+        try {
+          await fs.access(filePath, fs.constants.R_OK);
+          const stats = await fs.stat(filePath);
+          console.log(`PDF file stats: ${stats.size} bytes, modified: ${stats.mtime}`);
+          
+          if (stats.size === 0) {
+            throw new Error('PDF file is empty (0 bytes)');
+          }
+          
+          if (stats.size > 100 * 1024 * 1024) { // 100MB limit
+            throw new Error('PDF file is too large (>100MB)');
+          }
+        } catch (accessError) {
+          throw new Error(`Cannot access PDF file: ${accessError.message}`);
         }
 
-        // Step 3: Convert Uint8Array-based PDF to images
-        console.log(`Converting PDF Uint8Array to images...`);
-        const convertedImages = await this.convertPdfUint8ArrayToImages(pdfUint8Array, pdfInfo);
+        // Step 2: Parse PDF to Uint8Array with validation
+        console.log(`Reading and validating PDF file...`);
+        const pdfUint8Array = await this.parsePdfToUint8Array(filePath);
+        
+        // Step 3: Analyze PDF structure and handle encryption
+        console.log(`Analyzing PDF structure...`);
+        const pdfInfo = await this.analyzePdfFromUint8Array(pdfUint8Array, password);
+        
+        if (!pdfInfo.success) {
+          throw new Error(`PDF analysis failed: ${pdfInfo.error}`);
+        }
+        
+        if (pdfInfo.isEncrypted && !pdfInfo.password) {
+          throw new Error('PDF is encrypted and requires a password. Please provide the correct password.');
+        }
+
+        // Step 4: Convert to images with enhanced error handling
+        console.log(`Converting PDF to images (${pdfInfo.pageCount} pages)...`);
+        const convertedImages = await this.convertPdfUint8ArrayToImages(pdfUint8Array, pdfInfo, filePath);
         images.push(...convertedImages);
 
         if (images.length === 0) {
-          throw new Error('No pages could be converted from PDF');
+          throw new Error('No pages could be converted from PDF - the PDF might be corrupted or contain no renderable content');
         }
+
+        console.log(`Successfully converted PDF to ${images.length} images`);
 
       } else if (mimeType.startsWith('image/')) {
         // For image files, optimize and convert to JPEG if needed
-        const outputPath = path.join(this.tempDir, `img_${Date.now()}.jpg`);
-        
-        await sharp(filePath)
-          .jpeg({ quality: 90 })
-          .resize(2048, 2048, { 
-            fit: 'inside',
-            withoutEnlargement: true 
-          })
-          .toFile(outputPath);
-          
+        console.log(`Processing image file: ${filePath}`);
+        const outputPath = await this.processImageFile(filePath);
         images.push(outputPath);
 
       } else if (mimeType.includes('document') || mimeType.includes('word')) {
         // For Word documents, we would need additional processing
-        // For now, throw an error as this requires more complex conversion
         throw new Error('Word document processing not yet implemented. Please convert to PDF first.');
       } else {
         throw new Error(`Unsupported file type: ${mimeType}`);
       }
 
-      console.log(`Successfully converted document to ${images.length} image(s)`);
+      console.log(`Document conversion completed: ${images.length} image(s) generated`);
       return images;
 
     } catch (error) {
       console.error('Document conversion error:', error);
+      
+      // Clean up any partial images on error
+      if (images.length > 0) {
+        await this.cleanupImages(images);
+      }
+      
       throw new Error(`Failed to convert document: ${error.message}`);
+    }
+  }
+
+  async processImageFile(filePath) {
+    try {
+      const outputPath = path.join(this.tempDir, `img_${Date.now()}.jpg`);
+      
+      // Validate image file
+      const imageInfo = await sharp(filePath).metadata();
+      console.log(`Image metadata:`, {
+        format: imageInfo.format,
+        width: imageInfo.width,
+        height: imageInfo.height,
+        channels: imageInfo.channels,
+        density: imageInfo.density
+      });
+      
+      // Process and optimize image
+      await sharp(filePath)
+        .jpeg({ quality: 90, progressive: true })
+        .resize(2048, 2048, { 
+          fit: 'inside',
+          withoutEnlargement: true 
+        })
+        .toFile(outputPath);
+        
+      console.log(`Image processed successfully: ${outputPath}`);
+      return outputPath;
+      
+    } catch (error) {
+      console.error('Image processing error:', error);
+      throw new Error(`Failed to process image: ${error.message}`);
     }
   }
 
@@ -109,7 +163,15 @@ export class DocumentProcessor {
       
       // Validate that it's actually a PDF
       if (!this.isPdfUint8Array(pdfUint8Array)) {
-        throw new Error('File does not appear to be a valid PDF');
+        throw new Error('File does not appear to be a valid PDF (missing PDF signature)');
+      }
+      
+      // Additional validation - check for PDF version
+      const pdfHeader = new TextDecoder().decode(pdfUint8Array.slice(0, 20));
+      console.log(`PDF header: ${pdfHeader}`);
+      
+      if (!pdfHeader.includes('PDF-')) {
+        throw new Error('Invalid PDF format - missing version information');
       }
       
       return pdfUint8Array;
@@ -149,7 +211,8 @@ export class DocumentProcessor {
       try {
         pdfDocument = await pdfjsLib.getDocument({
           data: pdfUint8Array,
-          password: ''
+          password: '',
+          verbosity: 0 // Reduce PDF.js logging
         }).promise;
         console.log('PDF loaded successfully without password');
       } catch (error) {
@@ -162,7 +225,8 @@ export class DocumentProcessor {
             try {
               pdfDocument = await pdfjsLib.getDocument({
                 data: pdfUint8Array,
-                password: providedPassword
+                password: providedPassword,
+                verbosity: 0
               }).promise;
               password = providedPassword;
               console.log('PDF unlocked with provided password');
@@ -177,7 +241,8 @@ export class DocumentProcessor {
               try {
                 pdfDocument = await pdfjsLib.getDocument({
                   data: pdfUint8Array,
-                  password: testPassword
+                  password: testPassword,
+                  verbosity: 0
                 }).promise;
                 password = testPassword;
                 console.log(`PDF unlocked with password: "${testPassword === '' ? '(empty)' : testPassword}"`);
@@ -199,16 +264,29 @@ export class DocumentProcessor {
       
       const pageCount = pdfDocument.numPages;
       
+      if (pageCount === 0) {
+        throw new Error('PDF contains no pages');
+      }
+      
+      if (pageCount > 50) {
+        console.warn(`PDF has many pages (${pageCount}). Processing may take a while.`);
+      }
+      
       // Get additional PDF metadata
-      const metadata = await pdfDocument.getMetadata();
+      let metadata = null;
+      try {
+        metadata = await pdfDocument.getMetadata();
+      } catch (metadataError) {
+        console.warn('Could not read PDF metadata:', metadataError.message);
+      }
       
       console.log(`PDF analysis complete:`, {
         pageCount,
         isEncrypted,
         hasPassword: !!password,
-        title: metadata.info?.Title || 'Unknown',
-        author: metadata.info?.Author || 'Unknown',
-        creator: metadata.info?.Creator || 'Unknown'
+        title: metadata?.info?.Title || 'Unknown',
+        author: metadata?.info?.Author || 'Unknown',
+        creator: metadata?.info?.Creator || 'Unknown'
       });
       
       return {
@@ -216,7 +294,7 @@ export class DocumentProcessor {
         isEncrypted,
         password,
         success: true,
-        metadata: metadata.info,
+        metadata: metadata?.info || {},
         pdfDocument // Keep reference for further processing
       };
       
@@ -233,62 +311,150 @@ export class DocumentProcessor {
     }
   }
 
-  async convertPdfUint8ArrayToImages(pdfUint8Array, pdfInfo) {
+  async convertPdfUint8ArrayToImages(pdfUint8Array, pdfInfo, originalFilePath) {
     const images = [];
+    let tempPdfPath = null;
     
     try {
       console.log(`Converting PDF Uint8Array to images (${pdfInfo.pageCount} pages)...`);
       
       // Create a temporary file from Uint8Array for pdf2pic
-      const tempPdfPath = path.join(this.tempDir, `temp_pdf_${Date.now()}.pdf`);
+      tempPdfPath = path.join(this.tempDir, `temp_pdf_${Date.now()}_${Math.random().toString(36).substr(2, 9)}.pdf`);
       
       // Convert Uint8Array back to Buffer for file writing
       const pdfBuffer = Buffer.from(pdfUint8Array);
       await fs.writeFile(tempPdfPath, pdfBuffer);
       
-      try {
-        // Use pdf2pic for conversion with password support
-        const convertOptions = {
-          density: 200,           // Output DPI (higher = better quality)
-          saveFilename: `pdf_${Date.now()}`,
-          savePath: this.tempDir,
-          format: "jpeg",         // Output format
-          width: 2048,           // Max width
-          height: 2048,          // Max height
-          quality: 90            // JPEG quality
-        };
+      // Verify the temporary file was written correctly
+      const tempStats = await fs.stat(tempPdfPath);
+      console.log(`Temporary PDF created: ${tempPdfPath} (${tempStats.size} bytes)`);
+      
+      if (tempStats.size !== pdfUint8Array.length) {
+        throw new Error(`Temporary PDF size mismatch: expected ${pdfUint8Array.length}, got ${tempStats.size}`);
+      }
 
-        // Add password if needed
-        if (pdfInfo.password) {
-          convertOptions.password = pdfInfo.password;
-        }
+      // Enhanced conversion options with better error handling
+      const convertOptions = {
+        density: 150,           // Reduced DPI for better compatibility
+        saveFilename: `pdf_${Date.now()}`,
+        savePath: this.tempDir,
+        format: "png",          // Use PNG instead of JPEG for better compatibility
+        width: 1600,           // Reduced size for better performance
+        height: 1600,          // Reduced size for better performance
+        quality: 85,           // Slightly reduced quality for better compatibility
+        preserveAspectRatio: true,
+        background: 'white'    // Set white background
+      };
 
-        const convert = fromPath(tempPdfPath, convertOptions);
-        const pageCount = pdfInfo.pageCount || 10; // Fallback to 10 if we can't determine
+      // Add password if needed
+      if (pdfInfo.password && pdfInfo.password !== '') {
+        convertOptions.password = pdfInfo.password;
+        console.log('Using password for PDF conversion');
+      }
 
-        console.log(`Converting ${pageCount} pages with${pdfInfo.password ? ' password' : 'out password'}...`);
+      console.log('PDF conversion options:', {
+        ...convertOptions,
+        password: convertOptions.password ? '[REDACTED]' : 'none'
+      });
 
-        // Convert all pages
-        for (let pageNum = 1; pageNum <= pageCount; pageNum++) {
-          try {
-            const result = await convert(pageNum, { responseType: "image" });
-            
-            if (result && result.path) {
+      const convert = fromPath(tempPdfPath, convertOptions);
+      const pageCount = Math.min(pdfInfo.pageCount, 20); // Limit to 20 pages for performance
+
+      console.log(`Converting ${pageCount} pages (limited from ${pdfInfo.pageCount})...`);
+
+      // Convert pages with individual error handling
+      for (let pageNum = 1; pageNum <= pageCount; pageNum++) {
+        try {
+          console.log(`Converting page ${pageNum}/${pageCount}...`);
+          
+          const result = await convert(pageNum, { 
+            responseType: "image",
+            timeout: 30000 // 30 second timeout per page
+          });
+          
+          if (result && result.path) {
+            // Verify the converted image exists and has content
+            try {
+              const imageStats = await fs.stat(result.path);
+              if (imageStats.size === 0) {
+                console.warn(`Page ${pageNum} converted to empty file, skipping`);
+                continue;
+              }
+              
+              // Validate image with sharp
+              const imageInfo = await sharp(result.path).metadata();
+              if (!imageInfo.width || !imageInfo.height) {
+                console.warn(`Page ${pageNum} has invalid dimensions, skipping`);
+                continue;
+              }
+              
               images.push(result.path);
-              console.log(`Converted page ${pageNum}/${pageCount} to: ${result.path}`);
+              console.log(`Successfully converted page ${pageNum} to: ${result.path} (${imageStats.size} bytes, ${imageInfo.width}x${imageInfo.height})`);
+              
+            } catch (validationError) {
+              console.warn(`Page ${pageNum} validation failed:`, validationError.message);
+              continue;
             }
-          } catch (pageError) {
-            console.warn(`Failed to convert page ${pageNum}:`, pageError.message);
-            // If we can't convert a page, we might have reached the end
-            if (pageError.message.includes('Invalid page number') || 
-                pageError.message.includes('page does not exist')) {
-              break;
+          } else {
+            console.warn(`Page ${pageNum} conversion returned no result`);
+          }
+          
+        } catch (pageError) {
+          console.error(`Failed to convert page ${pageNum}:`, pageError.message);
+          
+          // Check for specific error types
+          if (pageError.message.includes('Invalid page number') || 
+              pageError.message.includes('page does not exist')) {
+            console.log(`Reached end of document at page ${pageNum}`);
+            break;
+          } else if (pageError.message.includes('Insufficient image data')) {
+            console.warn(`Page ${pageNum} has insufficient image data, trying alternative method...`);
+            
+            // Try with different settings for problematic pages
+            try {
+              const alternativeOptions = {
+                ...convertOptions,
+                density: 100,
+                format: "jpeg",
+                quality: 70
+              };
+              
+              const alternativeConvert = fromPath(tempPdfPath, alternativeOptions);
+              const alternativeResult = await alternativeConvert(pageNum, { responseType: "image" });
+              
+              if (alternativeResult && alternativeResult.path) {
+                images.push(alternativeResult.path);
+                console.log(`Page ${pageNum} converted with alternative settings: ${alternativeResult.path}`);
+              }
+            } catch (alternativeError) {
+              console.warn(`Alternative conversion also failed for page ${pageNum}:`, alternativeError.message);
             }
+          } else {
+            console.warn(`Unexpected error on page ${pageNum}, continuing with next page...`);
           }
         }
-        
-      } finally {
-        // Clean up temporary PDF file
+      }
+      
+      console.log(`PDF conversion completed: ${images.length}/${pageCount} pages converted successfully`);
+      
+      if (images.length === 0) {
+        throw new Error('No pages could be converted. The PDF might be corrupted, contain only vector graphics, or have compatibility issues with the conversion tool.');
+      }
+      
+      return images;
+      
+    } catch (error) {
+      console.error('Error converting PDF Uint8Array to images:', error);
+      
+      // Clean up any partial images
+      if (images.length > 0) {
+        await this.cleanupImages(images);
+      }
+      
+      throw new Error(`Failed to convert PDF to images: ${error.message}`);
+    } finally {
+      // Clean up temporary PDF file
+      if (tempPdfPath) {
         try {
           await fs.unlink(tempPdfPath);
           console.log(`Cleaned up temporary PDF file: ${tempPdfPath}`);
@@ -296,41 +462,6 @@ export class DocumentProcessor {
           console.warn(`Failed to clean up temporary PDF file: ${tempPdfPath}`, cleanupError);
         }
       }
-      
-      console.log(`Successfully converted PDF Uint8Array to ${images.length} images`);
-      return images;
-      
-    } catch (error) {
-      console.error('Error converting PDF Uint8Array to images:', error);
-      throw new Error(`Failed to convert PDF Uint8Array to images: ${error.message}`);
-    }
-  }
-
-  async analyzePdf(filePath, providedPassword = null) {
-    try {
-      // Use the new Uint8Array-based approach
-      const pdfUint8Array = await this.parsePdfToUint8Array(filePath);
-      return await this.analyzePdfFromUint8Array(pdfUint8Array, providedPassword);
-    } catch (error) {
-      console.error('PDF analysis error:', error);
-      return {
-        pageCount: null,
-        isEncrypted: false,
-        password: null,
-        success: false,
-        error: error.message
-      };
-    }
-  }
-
-  async getPdfPageCount(filePath) {
-    try {
-      // Use the new analyzePdf method
-      const pdfInfo = await this.analyzePdf(filePath);
-      return pdfInfo.pageCount;
-    } catch (error) {
-      console.warn('Could not determine PDF page count:', error.message);
-      return null;
     }
   }
 
