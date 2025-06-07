@@ -3,7 +3,7 @@ import fs from 'fs/promises';
 import { fileURLToPath } from 'url';
 import sharp from 'sharp';
 import { fromPath } from 'pdf2pic';
-import * as pdfjsLib from 'pdfjs-dist';
+import * as pdfjsLib from 'pdfjs-dist/legacy/build/pdf.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -43,55 +43,22 @@ export class DocumentProcessor {
 
     try {
       if (mimeType === 'application/pdf') {
-        // Convert PDF to images with encryption support
-        console.log(`Converting PDF to images: ${filePath}`);
+        // Step 1: Parse PDF to buffer first
+        console.log(`Reading PDF file to buffer: ${filePath}`);
+        const pdfBuffer = await this.parsePdfToBuffer(filePath);
         
-        // First, try to determine if PDF is encrypted and get page count
-        const pdfInfo = await this.analyzePdf(filePath, password);
+        // Step 2: Analyze PDF with buffer
+        console.log(`Analyzing PDF from buffer...`);
+        const pdfInfo = await this.analyzePdfFromBuffer(pdfBuffer, password);
         
         if (pdfInfo.isEncrypted && !pdfInfo.password) {
           throw new Error('PDF is encrypted and requires a password. Please provide the password or try common passwords.');
         }
 
-        // Use pdf2pic for conversion with password support
-        const convertOptions = {
-          density: 200,           // Output DPI (higher = better quality)
-          saveFilename: `pdf_${Date.now()}`,
-          savePath: this.tempDir,
-          format: "jpeg",         // Output format
-          width: 2048,           // Max width
-          height: 2048,          // Max height
-          quality: 90            // JPEG quality
-        };
-
-        // Add password if needed
-        if (pdfInfo.password) {
-          convertOptions.password = pdfInfo.password;
-        }
-
-        const convert = fromPath(filePath, convertOptions);
-        const pageCount = pdfInfo.pageCount || 10; // Fallback to 10 if we can't determine
-
-        console.log(`PDF has ${pageCount} pages, converting with${pdfInfo.password ? ' password' : 'out password'}...`);
-
-        // Convert all pages
-        for (let pageNum = 1; pageNum <= pageCount; pageNum++) {
-          try {
-            const result = await convert(pageNum, { responseType: "image" });
-            
-            if (result && result.path) {
-              images.push(result.path);
-              console.log(`Converted page ${pageNum} to: ${result.path}`);
-            }
-          } catch (pageError) {
-            console.warn(`Failed to convert page ${pageNum}:`, pageError.message);
-            // If we can't convert a page, we might have reached the end
-            if (pageError.message.includes('Invalid page number') || 
-                pageError.message.includes('page does not exist')) {
-              break;
-            }
-          }
-        }
+        // Step 3: Convert buffer-based PDF to images
+        console.log(`Converting PDF buffer to images...`);
+        const convertedImages = await this.convertPdfBufferToImages(pdfBuffer, pdfInfo);
+        images.push(...convertedImages);
 
         if (images.length === 0) {
           throw new Error('No pages could be converted from PDF');
@@ -128,12 +95,36 @@ export class DocumentProcessor {
     }
   }
 
-  async analyzePdf(filePath, providedPassword = null) {
+  async parsePdfToBuffer(filePath) {
     try {
-      console.log(`Analyzing PDF: ${filePath}`);
+      console.log(`Parsing PDF file to buffer: ${filePath}`);
       
-      // Read the PDF file
+      // Read the entire PDF file into memory as a buffer
       const pdfBuffer = await fs.readFile(filePath);
+      
+      console.log(`PDF buffer created successfully: ${pdfBuffer.length} bytes`);
+      
+      // Validate that it's actually a PDF
+      if (!this.isPdfBuffer(pdfBuffer)) {
+        throw new Error('File does not appear to be a valid PDF');
+      }
+      
+      return pdfBuffer;
+    } catch (error) {
+      console.error('Error parsing PDF to buffer:', error);
+      throw new Error(`Failed to parse PDF to buffer: ${error.message}`);
+    }
+  }
+
+  isPdfBuffer(buffer) {
+    // Check PDF magic number (starts with %PDF)
+    const pdfSignature = Buffer.from('%PDF');
+    return buffer.length >= 4 && buffer.subarray(0, 4).equals(pdfSignature);
+  }
+
+  async analyzePdfFromBuffer(pdfBuffer, providedPassword = null) {
+    try {
+      console.log(`Analyzing PDF from buffer (${pdfBuffer.length} bytes)...`);
       
       let pdfDocument = null;
       let password = null;
@@ -145,10 +136,11 @@ export class DocumentProcessor {
           data: pdfBuffer,
           password: ''
         }).promise;
+        console.log('PDF loaded successfully without password');
       } catch (error) {
         if (error.name === 'PasswordException') {
           isEncrypted = true;
-          console.log('PDF is encrypted, trying passwords...');
+          console.log('PDF is encrypted, attempting to unlock...');
           
           // Try provided password first
           if (providedPassword) {
@@ -173,7 +165,7 @@ export class DocumentProcessor {
                   password: testPassword
                 }).promise;
                 password = testPassword;
-                console.log(`PDF unlocked with password: "${testPassword}"`);
+                console.log(`PDF unlocked with password: "${testPassword === '' ? '(empty)' : testPassword}"`);
                 break;
               } catch (passwordError) {
                 // Continue trying other passwords
@@ -191,15 +183,116 @@ export class DocumentProcessor {
       }
       
       const pageCount = pdfDocument.numPages;
-      console.log(`PDF analysis complete: ${pageCount} pages, encrypted: ${isEncrypted}, password found: ${!!password}`);
+      
+      // Get additional PDF metadata
+      const metadata = await pdfDocument.getMetadata();
+      
+      console.log(`PDF analysis complete:`, {
+        pageCount,
+        isEncrypted,
+        hasPassword: !!password,
+        title: metadata.info?.Title || 'Unknown',
+        author: metadata.info?.Author || 'Unknown',
+        creator: metadata.info?.Creator || 'Unknown'
+      });
       
       return {
         pageCount,
         isEncrypted,
         password,
-        success: true
+        success: true,
+        metadata: metadata.info,
+        pdfDocument // Keep reference for further processing
       };
       
+    } catch (error) {
+      console.error('PDF buffer analysis error:', error);
+      return {
+        pageCount: null,
+        isEncrypted: false,
+        password: null,
+        success: false,
+        error: error.message,
+        pdfDocument: null
+      };
+    }
+  }
+
+  async convertPdfBufferToImages(pdfBuffer, pdfInfo) {
+    const images = [];
+    
+    try {
+      console.log(`Converting PDF buffer to images (${pdfInfo.pageCount} pages)...`);
+      
+      // Create a temporary file from buffer for pdf2pic
+      const tempPdfPath = path.join(this.tempDir, `temp_pdf_${Date.now()}.pdf`);
+      await fs.writeFile(tempPdfPath, pdfBuffer);
+      
+      try {
+        // Use pdf2pic for conversion with password support
+        const convertOptions = {
+          density: 200,           // Output DPI (higher = better quality)
+          saveFilename: `pdf_${Date.now()}`,
+          savePath: this.tempDir,
+          format: "jpeg",         // Output format
+          width: 2048,           // Max width
+          height: 2048,          // Max height
+          quality: 90            // JPEG quality
+        };
+
+        // Add password if needed
+        if (pdfInfo.password) {
+          convertOptions.password = pdfInfo.password;
+        }
+
+        const convert = fromPath(tempPdfPath, convertOptions);
+        const pageCount = pdfInfo.pageCount || 10; // Fallback to 10 if we can't determine
+
+        console.log(`Converting ${pageCount} pages with${pdfInfo.password ? ' password' : 'out password'}...`);
+
+        // Convert all pages
+        for (let pageNum = 1; pageNum <= pageCount; pageNum++) {
+          try {
+            const result = await convert(pageNum, { responseType: "image" });
+            
+            if (result && result.path) {
+              images.push(result.path);
+              console.log(`Converted page ${pageNum}/${pageCount} to: ${result.path}`);
+            }
+          } catch (pageError) {
+            console.warn(`Failed to convert page ${pageNum}:`, pageError.message);
+            // If we can't convert a page, we might have reached the end
+            if (pageError.message.includes('Invalid page number') || 
+                pageError.message.includes('page does not exist')) {
+              break;
+            }
+          }
+        }
+        
+      } finally {
+        // Clean up temporary PDF file
+        try {
+          await fs.unlink(tempPdfPath);
+          console.log(`Cleaned up temporary PDF file: ${tempPdfPath}`);
+        } catch (cleanupError) {
+          console.warn(`Failed to clean up temporary PDF file: ${tempPdfPath}`, cleanupError);
+        }
+      }
+      
+      console.log(`Successfully converted PDF buffer to ${images.length} images`);
+      return images;
+      
+    } catch (error) {
+      console.error('Error converting PDF buffer to images:', error);
+      throw new Error(`Failed to convert PDF buffer to images: ${error.message}`);
+    }
+  }
+
+  async analyzePdf(filePath, providedPassword = null) {
+    try {
+      // Use the new buffer-based approach
+      const pdfBuffer = await this.parsePdfToBuffer(filePath);
+      return await this.analyzePdfFromBuffer(pdfBuffer, providedPassword);
     } catch (error) {
       console.error('PDF analysis error:', error);
       return {
