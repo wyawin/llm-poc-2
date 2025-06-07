@@ -2,6 +2,7 @@ import path from 'path';
 import fs from 'fs/promises';
 import { fileURLToPath } from 'url';
 import sharp from 'sharp';
+import { fromPath } from 'pdf2pic';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -25,25 +26,46 @@ export class DocumentProcessor {
 
     try {
       if (mimeType === 'application/pdf') {
-        // Convert PDF to images using pdf-poppler
-        const pdf = await import('pdf-poppler');
-        const options = {
-          format: 'jpeg',
-          out_dir: this.tempDir,
-          out_prefix: `pdf_${Date.now()}`,
-          page: null // Convert all pages
-        };
+        // Convert PDF to images using pdf2pic
+        console.log(`Converting PDF to images: ${filePath}`);
+        
+        const convert = fromPath(filePath, {
+          density: 200,           // Output DPI (higher = better quality)
+          saveFilename: `pdf_${Date.now()}`,
+          savePath: this.tempDir,
+          format: "jpeg",         // Output format
+          width: 2048,           // Max width
+          height: 2048,          // Max height
+          quality: 90            // JPEG quality
+        });
 
-        const pdfPages = await pdf.convert(filePath, options);
-        
-        // pdf-poppler returns an array of page info, but files are saved to disk
-        // We need to find the generated files
-        const files = await fs.readdir(this.tempDir);
-        const pdfFiles = files.filter(file => file.startsWith(options.out_prefix));
-        
-        for (const file of pdfFiles) {
-          const imagePath = path.join(this.tempDir, file);
-          images.push(imagePath);
+        // Get the number of pages first
+        const pdfInfo = await this.getPdfPageCount(filePath);
+        const pageCount = pdfInfo || 10; // Fallback to 10 if we can't determine
+
+        console.log(`PDF has ${pageCount} pages, converting...`);
+
+        // Convert all pages
+        for (let pageNum = 1; pageNum <= pageCount; pageNum++) {
+          try {
+            const result = await convert(pageNum, { responseType: "image" });
+            
+            if (result && result.path) {
+              images.push(result.path);
+              console.log(`Converted page ${pageNum} to: ${result.path}`);
+            }
+          } catch (pageError) {
+            console.warn(`Failed to convert page ${pageNum}:`, pageError.message);
+            // If we can't convert a page, we might have reached the end
+            if (pageError.message.includes('Invalid page number') || 
+                pageError.message.includes('page does not exist')) {
+              break;
+            }
+          }
+        }
+
+        if (images.length === 0) {
+          throw new Error('No pages could be converted from PDF');
         }
 
       } else if (mimeType.startsWith('image/')) {
@@ -68,12 +90,44 @@ export class DocumentProcessor {
         throw new Error(`Unsupported file type: ${mimeType}`);
       }
 
-      console.log(`Converted document to ${images.length} image(s)`);
+      console.log(`Successfully converted document to ${images.length} image(s)`);
       return images;
 
     } catch (error) {
       console.error('Document conversion error:', error);
       throw new Error(`Failed to convert document: ${error.message}`);
+    }
+  }
+
+  async getPdfPageCount(filePath) {
+    try {
+      // Try to get page count by attempting to convert page 1 and checking metadata
+      const convert = fromPath(filePath, {
+        density: 72,
+        saveFilename: `temp_count_${Date.now()}`,
+        savePath: this.tempDir,
+        format: "jpeg"
+      });
+
+      // Try converting increasingly higher page numbers until we fail
+      let pageCount = 1;
+      for (let i = 1; i <= 100; i++) { // Reasonable upper limit
+        try {
+          await convert(i, { responseType: "image" });
+          pageCount = i;
+        } catch (error) {
+          if (error.message.includes('Invalid page number') || 
+              error.message.includes('page does not exist')) {
+            break;
+          }
+          // For other errors, continue trying
+        }
+      }
+
+      return pageCount;
+    } catch (error) {
+      console.warn('Could not determine PDF page count:', error.message);
+      return null;
     }
   }
 
@@ -228,6 +282,7 @@ export class DocumentProcessor {
       for (const imagePath of imagePaths) {
         try {
           await fs.unlink(imagePath);
+          console.log(`Cleaned up temporary image: ${imagePath}`);
         } catch (error) {
           console.warn(`Failed to delete temporary image: ${imagePath}`, error);
         }
