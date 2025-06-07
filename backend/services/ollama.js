@@ -432,94 +432,265 @@ Provide detailed, professional analysis based on the available data. If certain 
   }
 
   parseJsonFromResponse(responseText) {
-    // Method 1: Try to find JSON object directly
-    let jsonMatch = responseText.match(/\{[\s\S]*\}/);
+    console.log('Starting JSON parsing with enhanced methods...');
     
-    if (jsonMatch) {
-      try {
-        const jsonString = jsonMatch[0];
-        console.log('Attempting to parse JSON (method 1):', jsonString.substring(0, 200) + '...');
-        return JSON.parse(jsonString);
-      } catch (error) {
-        console.log('Method 1 failed:', error.message);
+    // Clean the response text first
+    let cleanedText = responseText.trim();
+    
+    // Remove common prefixes that models sometimes add
+    const prefixesToRemove = [
+      'Here is the JSON response:',
+      'Here\'s the JSON response:',
+      'The JSON response is:',
+      'JSON response:',
+      'Response:',
+      'Here is the analysis:',
+      'Here\'s the analysis:',
+      'Analysis:',
+      'Result:',
+      'Output:',
+      'Based on the analysis:',
+      'Based on the document analysis:',
+      'After analyzing the document:',
+      'The extracted data is:',
+      'Extracted data:',
+      'Document analysis result:',
+      'Financial analysis result:',
+      'Credit analysis result:'
+    ];
+    
+    for (const prefix of prefixesToRemove) {
+      if (cleanedText.toLowerCase().startsWith(prefix.toLowerCase())) {
+        cleanedText = cleanedText.substring(prefix.length).trim();
+        console.log(`Removed prefix: "${prefix}"`);
+        break;
       }
     }
-
-    // Method 2: Try to extract from code blocks
-    const codeBlockMatch = responseText.match(/```(?:json)?\s*(\{[\s\S]*?\})\s*```/);
-    if (codeBlockMatch) {
-      try {
-        const jsonString = codeBlockMatch[1];
-        console.log('Attempting to parse JSON (method 2):', jsonString.substring(0, 200) + '...');
-        return JSON.parse(jsonString);
-      } catch (error) {
-        console.log('Method 2 failed:', error.message);
+    
+    // Remove common suffixes
+    const suffixesToRemove = [
+      'This completes the analysis.',
+      'End of analysis.',
+      'Analysis complete.',
+      'That\'s the complete analysis.',
+      'This is the final result.',
+      'End of JSON response.',
+      'End of response.'
+    ];
+    
+    for (const suffix of suffixesToRemove) {
+      if (cleanedText.toLowerCase().endsWith(suffix.toLowerCase())) {
+        cleanedText = cleanedText.substring(0, cleanedText.length - suffix.length).trim();
+        console.log(`Removed suffix: "${suffix}"`);
+        break;
       }
     }
+    
+    // Method 1: Try to parse the cleaned text directly
+    try {
+      console.log('Method 1: Attempting direct JSON parse...');
+      const parsed = JSON.parse(cleanedText);
+      console.log('Method 1: Success - Direct JSON parse worked');
+      return parsed;
+    } catch (error) {
+      console.log('Method 1: Failed -', error.message);
+    }
 
-    // Method 3: Try to find the largest JSON-like structure
-    const jsonMatches = responseText.match(/\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}/g);
-    if (jsonMatches && jsonMatches.length > 0) {
-      // Sort by length and try the longest one first
-      const sortedMatches = jsonMatches.sort((a, b) => b.length - a.length);
+    // Method 2: Extract JSON from code blocks (```json or ```)
+    try {
+      console.log('Method 2: Attempting code block extraction...');
+      const codeBlockPatterns = [
+        /```json\s*(\{[\s\S]*?\})\s*```/i,
+        /```\s*(\{[\s\S]*?\})\s*```/i,
+        /`(\{[\s\S]*?\})`/i
+      ];
       
-      for (const match of sortedMatches) {
-        try {
-          console.log('Attempting to parse JSON (method 3):', match.substring(0, 200) + '...');
-          return JSON.parse(match);
-        } catch (error) {
-          console.log('Method 3 attempt failed:', error.message);
-          continue;
+      for (const pattern of codeBlockPatterns) {
+        const match = cleanedText.match(pattern);
+        if (match && match[1]) {
+          const jsonString = match[1].trim();
+          console.log(`Method 2: Found code block, attempting parse...`);
+          const parsed = JSON.parse(jsonString);
+          console.log('Method 2: Success - Code block extraction worked');
+          return parsed;
         }
       }
+      console.log('Method 2: No code blocks found');
+    } catch (error) {
+      console.log('Method 2: Failed -', error.message);
     }
 
-    // Method 4: Try to clean and parse the entire response
+    // Method 3: Find the largest JSON-like structure
     try {
-      // Remove any text before the first { and after the last }
-      const firstBrace = responseText.indexOf('{');
-      const lastBrace = responseText.lastIndexOf('}');
+      console.log('Method 3: Attempting largest JSON structure extraction...');
+      const jsonPattern = /\{(?:[^{}]|{(?:[^{}]|{[^{}]*})*})*\}/g;
+      const matches = cleanedText.match(jsonPattern);
+      
+      if (matches && matches.length > 0) {
+        // Sort by length and try the longest ones first
+        const sortedMatches = matches.sort((a, b) => b.length - a.length);
+        
+        for (let i = 0; i < Math.min(3, sortedMatches.length); i++) {
+          try {
+            const jsonString = sortedMatches[i].trim();
+            console.log(`Method 3: Attempting to parse match ${i + 1} (length: ${jsonString.length})`);
+            const parsed = JSON.parse(jsonString);
+            console.log('Method 3: Success - Largest JSON structure worked');
+            return parsed;
+          } catch (error) {
+            console.log(`Method 3: Match ${i + 1} failed -`, error.message);
+            continue;
+          }
+        }
+      }
+      console.log('Method 3: No valid JSON structures found');
+    } catch (error) {
+      console.log('Method 3: Failed -', error.message);
+    }
+
+    // Method 4: Extract from first { to last }
+    try {
+      console.log('Method 4: Attempting first-to-last brace extraction...');
+      const firstBrace = cleanedText.indexOf('{');
+      const lastBrace = cleanedText.lastIndexOf('}');
       
       if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
-        const cleanedJson = responseText.substring(firstBrace, lastBrace + 1);
-        console.log('Attempting to parse JSON (method 4):', cleanedJson.substring(0, 200) + '...');
-        return JSON.parse(cleanedJson);
+        const jsonString = cleanedText.substring(firstBrace, lastBrace + 1);
+        console.log(`Method 4: Extracted JSON from position ${firstBrace} to ${lastBrace}`);
+        const parsed = JSON.parse(jsonString);
+        console.log('Method 4: Success - First-to-last brace extraction worked');
+        return parsed;
       }
+      console.log('Method 4: No valid brace pair found');
     } catch (error) {
-      console.log('Method 4 failed:', error.message);
+      console.log('Method 4: Failed -', error.message);
     }
 
     // Method 5: Try to fix common JSON issues
     try {
-      let fixedJson = responseText;
+      console.log('Method 5: Attempting JSON repair...');
+      let fixedJson = cleanedText;
       
       // Remove any text before first {
       const firstBrace = fixedJson.indexOf('{');
       if (firstBrace > 0) {
         fixedJson = fixedJson.substring(firstBrace);
+        console.log('Method 5: Removed text before first brace');
       }
       
       // Remove any text after last }
       const lastBrace = fixedJson.lastIndexOf('}');
-      if (lastBrace !== -1) {
+      if (lastBrace !== -1 && lastBrace < fixedJson.length - 1) {
         fixedJson = fixedJson.substring(0, lastBrace + 1);
+        console.log('Method 5: Removed text after last brace');
       }
       
-      // Fix common issues
+      // Fix common JSON issues
       fixedJson = fixedJson
-        .replace(/,\s*}/g, '}')  // Remove trailing commas
-        .replace(/,\s*]/g, ']')  // Remove trailing commas in arrays
-        .replace(/\n/g, ' ')     // Replace newlines with spaces
-        .replace(/\s+/g, ' ')    // Normalize whitespace
+        .replace(/,\s*}/g, '}')          // Remove trailing commas before }
+        .replace(/,\s*]/g, ']')          // Remove trailing commas before ]
+        .replace(/\n/g, ' ')             // Replace newlines with spaces
+        .replace(/\r/g, ' ')             // Replace carriage returns
+        .replace(/\t/g, ' ')             // Replace tabs
+        .replace(/\s+/g, ' ')            // Normalize whitespace
+        .replace(/([{,]\s*)(\w+):/g, '$1"$2":')  // Quote unquoted keys
+        .replace(/:\s*'([^']*)'/g, ': "$1"')     // Replace single quotes with double quotes
         .trim();
       
-      console.log('Attempting to parse JSON (method 5):', fixedJson.substring(0, 200) + '...');
-      return JSON.parse(fixedJson);
+      console.log('Method 5: Applied JSON fixes, attempting parse...');
+      const parsed = JSON.parse(fixedJson);
+      console.log('Method 5: Success - JSON repair worked');
+      return parsed;
     } catch (error) {
-      console.log('Method 5 failed:', error.message);
+      console.log('Method 5: Failed -', error.message);
     }
 
-    throw new Error('No valid JSON found in response after trying all parsing methods');
+    // Method 6: Try line-by-line reconstruction
+    try {
+      console.log('Method 6: Attempting line-by-line reconstruction...');
+      const lines = cleanedText.split('\n');
+      let jsonLines = [];
+      let inJson = false;
+      let braceCount = 0;
+      
+      for (const line of lines) {
+        const trimmedLine = line.trim();
+        
+        if (trimmedLine.includes('{')) {
+          inJson = true;
+          braceCount += (trimmedLine.match(/\{/g) || []).length;
+        }
+        
+        if (inJson) {
+          jsonLines.push(trimmedLine);
+        }
+        
+        if (trimmedLine.includes('}')) {
+          braceCount -= (trimmedLine.match(/\}/g) || []).length;
+          if (braceCount <= 0) {
+            break;
+          }
+        }
+      }
+      
+      if (jsonLines.length > 0) {
+        const reconstructedJson = jsonLines.join(' ');
+        console.log('Method 6: Reconstructed JSON from lines, attempting parse...');
+        const parsed = JSON.parse(reconstructedJson);
+        console.log('Method 6: Success - Line reconstruction worked');
+        return parsed;
+      }
+      console.log('Method 6: No JSON lines found');
+    } catch (error) {
+      console.log('Method 6: Failed -', error.message);
+    }
+
+    // Method 7: Last resort - try to extract key-value pairs manually
+    try {
+      console.log('Method 7: Attempting manual key-value extraction...');
+      const result = {};
+      
+      // Look for common patterns like "key": "value" or "key": number
+      const patterns = [
+        /"(\w+)":\s*"([^"]*)"/g,           // "key": "string value"
+        /"(\w+)":\s*(\d+\.?\d*)/g,         // "key": number
+        /"(\w+)":\s*(true|false|null)/g,   // "key": boolean/null
+        /(\w+):\s*"([^"]*)"/g,             // key: "string value" (unquoted key)
+        /(\w+):\s*(\d+\.?\d*)/g            // key: number (unquoted key)
+      ];
+      
+      for (const pattern of patterns) {
+        let match;
+        while ((match = pattern.exec(cleanedText)) !== null) {
+          const key = match[1];
+          let value = match[2];
+          
+          // Convert value to appropriate type
+          if (value === 'true') value = true;
+          else if (value === 'false') value = false;
+          else if (value === 'null') value = null;
+          else if (/^\d+\.?\d*$/.test(value)) value = parseFloat(value);
+          
+          result[key] = value;
+        }
+      }
+      
+      if (Object.keys(result).length > 0) {
+        console.log('Method 7: Success - Manual extraction found', Object.keys(result).length, 'properties');
+        return result;
+      }
+      console.log('Method 7: No key-value pairs found');
+    } catch (error) {
+      console.log('Method 7: Failed -', error.message);
+    }
+
+    // If all methods fail, log the problematic text and throw error
+    console.error('All JSON parsing methods failed. Problematic text:');
+    console.error('='.repeat(80));
+    console.error(cleanedText.substring(0, 1000) + (cleanedText.length > 1000 ? '...' : ''));
+    console.error('='.repeat(80));
+    
+    throw new Error(`No valid JSON found in response after trying all parsing methods. Response length: ${responseText.length}`);
   }
 
   async checkHealth() {
