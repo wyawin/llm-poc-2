@@ -3,7 +3,7 @@ import fs from 'fs/promises';
 import { fileURLToPath } from 'url';
 import sharp from 'sharp';
 import { fromPath } from 'pdf2pic';
-import * as pdfjsLib from 'pdfjs-dist/legacy/build/pdf.min.mjs';
+import * as pdfjsLib from 'pdfjs-dist/legacy/build/pdf.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -43,21 +43,21 @@ export class DocumentProcessor {
 
     try {
       if (mimeType === 'application/pdf') {
-        // Step 1: Parse PDF to buffer first
-        console.log(`Reading PDF file to buffer: ${filePath}`);
-        const pdfBuffer = await this.parsePdfToBuffer(filePath);
+        // Step 1: Parse PDF to Uint8Array first
+        console.log(`Reading PDF file to Uint8Array: ${filePath}`);
+        const pdfUint8Array = await this.parsePdfToUint8Array(filePath);
         
-        // Step 2: Analyze PDF with buffer
-        console.log(`Analyzing PDF from buffer...`);
-        const pdfInfo = await this.analyzePdfFromBuffer(pdfBuffer, password);
+        // Step 2: Analyze PDF with Uint8Array
+        console.log(`Analyzing PDF from Uint8Array...`);
+        const pdfInfo = await this.analyzePdfFromUint8Array(pdfUint8Array, password);
         
         if (pdfInfo.isEncrypted && !pdfInfo.password) {
           throw new Error('PDF is encrypted and requires a password. Please provide the password or try common passwords.');
         }
 
-        // Step 3: Convert buffer-based PDF to images
-        console.log(`Converting PDF buffer to images...`, pdfInfo);
-        const convertedImages = await this.convertPdfBufferToImages(pdfBuffer, pdfInfo);
+        // Step 3: Convert Uint8Array-based PDF to images
+        console.log(`Converting PDF Uint8Array to images...`);
+        const convertedImages = await this.convertPdfUint8ArrayToImages(pdfUint8Array, pdfInfo);
         images.push(...convertedImages);
 
         if (images.length === 0) {
@@ -95,36 +95,51 @@ export class DocumentProcessor {
     }
   }
 
-  async parsePdfToBuffer(filePath) {
+  async parsePdfToUint8Array(filePath) {
     try {
-      console.log(`Parsing PDF file to buffer: ${filePath}`);
+      console.log(`Parsing PDF file to Uint8Array: ${filePath}`);
       
       // Read the entire PDF file into memory as a buffer
       const pdfBuffer = await fs.readFile(filePath);
       
-      console.log(`PDF buffer created successfully: ${pdfBuffer.length} bytes`);
+      // Convert Buffer to Uint8Array
+      const pdfUint8Array = new Uint8Array(pdfBuffer);
+      
+      console.log(`PDF Uint8Array created successfully: ${pdfUint8Array.length} bytes`);
       
       // Validate that it's actually a PDF
-      if (!this.isPdfBuffer(pdfBuffer)) {
+      if (!this.isPdfUint8Array(pdfUint8Array)) {
         throw new Error('File does not appear to be a valid PDF');
       }
       
-      return pdfBuffer;
+      return pdfUint8Array;
     } catch (error) {
-      console.error('Error parsing PDF to buffer:', error);
-      throw new Error(`Failed to parse PDF to buffer: ${error.message}`);
+      console.error('Error parsing PDF to Uint8Array:', error);
+      throw new Error(`Failed to parse PDF to Uint8Array: ${error.message}`);
     }
   }
 
-  isPdfBuffer(buffer) {
+  isPdfUint8Array(uint8Array) {
     // Check PDF magic number (starts with %PDF)
-    const pdfSignature = Buffer.from('%PDF');
-    return buffer.length >= 4 && buffer.subarray(0, 4).equals(pdfSignature);
+    const pdfSignature = new Uint8Array([0x25, 0x50, 0x44, 0x46]); // %PDF in bytes
+    
+    if (uint8Array.length < 4) {
+      return false;
+    }
+    
+    // Compare first 4 bytes
+    for (let i = 0; i < 4; i++) {
+      if (uint8Array[i] !== pdfSignature[i]) {
+        return false;
+      }
+    }
+    
+    return true;
   }
 
-  async analyzePdfFromBuffer(pdfBuffer, providedPassword = null) {
+  async analyzePdfFromUint8Array(pdfUint8Array, providedPassword = null) {
     try {
-      console.log(`Analyzing PDF from buffer (${pdfBuffer.length} bytes)...`);
+      console.log(`Analyzing PDF from Uint8Array (${pdfUint8Array.length} bytes)...`);
       
       let pdfDocument = null;
       let password = null;
@@ -133,7 +148,7 @@ export class DocumentProcessor {
       // Try to load the PDF without password first
       try {
         pdfDocument = await pdfjsLib.getDocument({
-          data: pdfBuffer,
+          data: pdfUint8Array,
           password: ''
         }).promise;
         console.log('PDF loaded successfully without password');
@@ -146,7 +161,7 @@ export class DocumentProcessor {
           if (providedPassword) {
             try {
               pdfDocument = await pdfjsLib.getDocument({
-                data: pdfBuffer,
+                data: pdfUint8Array,
                 password: providedPassword
               }).promise;
               password = providedPassword;
@@ -161,7 +176,7 @@ export class DocumentProcessor {
             for (const testPassword of this.commonPasswords) {
               try {
                 pdfDocument = await pdfjsLib.getDocument({
-                  data: pdfBuffer,
+                  data: pdfUint8Array,
                   password: testPassword
                 }).promise;
                 password = testPassword;
@@ -206,7 +221,7 @@ export class DocumentProcessor {
       };
       
     } catch (error) {
-      console.error('PDF buffer analysis error:', error);
+      console.error('PDF Uint8Array analysis error:', error);
       return {
         pageCount: null,
         isEncrypted: false,
@@ -218,14 +233,17 @@ export class DocumentProcessor {
     }
   }
 
-  async convertPdfBufferToImages(pdfBuffer, pdfInfo) {
+  async convertPdfUint8ArrayToImages(pdfUint8Array, pdfInfo) {
     const images = [];
     
     try {
-      console.log(`Converting PDF buffer to images (${pdfInfo.pageCount} pages)...`);
+      console.log(`Converting PDF Uint8Array to images (${pdfInfo.pageCount} pages)...`);
       
-      // Create a temporary file from buffer for pdf2pic
+      // Create a temporary file from Uint8Array for pdf2pic
       const tempPdfPath = path.join(this.tempDir, `temp_pdf_${Date.now()}.pdf`);
+      
+      // Convert Uint8Array back to Buffer for file writing
+      const pdfBuffer = Buffer.from(pdfUint8Array);
       await fs.writeFile(tempPdfPath, pdfBuffer);
       
       try {
@@ -279,20 +297,20 @@ export class DocumentProcessor {
         }
       }
       
-      console.log(`Successfully converted PDF buffer to ${images.length} images`);
+      console.log(`Successfully converted PDF Uint8Array to ${images.length} images`);
       return images;
       
     } catch (error) {
-      console.error('Error converting PDF buffer to images:', error);
-      throw new Error(`Failed to convert PDF buffer to images: ${error.message}`);
+      console.error('Error converting PDF Uint8Array to images:', error);
+      throw new Error(`Failed to convert PDF Uint8Array to images: ${error.message}`);
     }
   }
 
   async analyzePdf(filePath, providedPassword = null) {
     try {
-      // Use the new buffer-based approach
-      const pdfBuffer = await this.parsePdfToBuffer(filePath);
-      return await this.analyzePdfFromBuffer(pdfBuffer, providedPassword);
+      // Use the new Uint8Array-based approach
+      const pdfUint8Array = await this.parsePdfToUint8Array(filePath);
+      return await this.analyzePdfFromUint8Array(pdfUint8Array, providedPassword);
     } catch (error) {
       console.error('PDF analysis error:', error);
       return {
